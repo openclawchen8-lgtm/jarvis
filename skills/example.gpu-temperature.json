@@ -1,0 +1,10 @@
+{
+  "name": "get_gpu_temperature",
+  "description": "取得目前 Mac GPU 溫度",
+  "keywords": ["GPU", "溫度", "發熱", "顯示卡"],
+  "parameters": {
+    "type": "object",
+    "properties": {}
+  },
+  "command": "sudo powermetrics --samplers gpu_power -i 1000 -n 1 | grep 'GPU die temperature' | awk '{print $4}'"
+}

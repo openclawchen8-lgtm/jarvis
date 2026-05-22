@@ -1,0 +1,8 @@
+# Kokoro-82M TTS Dependencies
+# 安裝方式：pip install -r requirements.txt
+
+kokoro>=0.9.4
+soundfile
+pypinyin>=0.55.0
+cn2an
+jieba

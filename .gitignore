@@ -1,0 +1,85 @@
+# ==============================================
+# 模型權重（不下載，留本地）
+# ==============================================
+models/
+models_qwen1.5/
+models_qwen2.5_7b/
+voice/models/
+*.pth
+*.pt
+*.mnn
+*.bin
+*.onnx
+
+# ==============================================
+# 編譯產物 & 開發快取
+# ==============================================
+MNN/build/
+MNN/pymnn_build/
+MNN/source/
+MNN/3rd_party/
+whisper.cpp/
+dev/
+__pycache__/
+*.pyc
+.pytest_cache/
+build/
+dist/
+*.egg-info/
+*.whl
+
+# ==============================================
+# macOS 系統
+# ==============================================
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# ==============================================
+# 輸出檔（每次執行產生）
+# ==============================================
+assets/audio/
+assets/logs/
+*.wav
+*.mp3
+*.ogg
+
+# ==============================================
+# 環境變數
+# ==============================================
+.env
+.env.local
+
+# Submodules (不要當 embedded repo 追蹤)
+models_a2bs/MNN/UniTalker-MNN/
+renderers/liteavatar-src/
+
+# 測試音頻
+assets/img/*.mp4
+assets/img/*.gif
+
+# Blender 快取
+.blender/
+
+# HuggingFace 模型快取
+.cache/
+huggingface/
+
+assets/img/
+assets/models/
+
+# ==============================================
+# LiteAvatar 下載資產（需手動下載，不上傳）
+# ==============================================
+renderers/liteavatar/avatars/
+renderers/liteavatar/.cache/
+renderers/liteavatar-src/weights_cache/
+node_modules/
+*.log
+.venv/
+.vscode/
+.idea/
+temp/
+tmp/
+assets/liteavatar/

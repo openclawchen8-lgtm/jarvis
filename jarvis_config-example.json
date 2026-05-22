@@ -1,0 +1,67 @@
+{
+  "models": {
+    "backends": {
+      "mnn-qwen1.5": {
+        "type": "mnn",
+        "label": "Qwen1.5-0.5B (輕量快速)",
+        "model_dir": "models_qwen1.5"
+      },
+      "mnn-qwen3.5": {
+        "type": "mnn",
+        "label": "Qwen3.5-0.8B (較強，VL支援)",
+        "model_dir": "models"
+      },
+      "openai-gpt4o-mini": {
+        "type": "openai",
+        "label": "GPT-5.5 (雲端)",
+        "model": "openai/gpt-5.5",
+        "api_base": "https://zenmux.ai/api/v1",
+        "api_key": "YOUR_API_KEY"
+      },
+      "openai-deepseek": {
+        "type": "openai",
+        "label": "DeepSeek V4 Flash (雲端)",
+        "model": "deepseek/deepseek-v4-flash",
+        "api_base": "https://zenmux.ai/api/v1",
+        "api_key": "YOUR_API_KEY"
+      },
+      "nvidia-nim": {
+        "type": "openai",
+        "label": "NVIDIA NIM (雲端)",
+        "model": "meta/llama-3.1-70b-instruct",
+        "api_base": "https://integrate.api.nvidia.com/v1",
+        "api_key": "YOUR_NVIDIA_API_KEY"
+      }
+    }
+  },
+  "a2bs": {
+    "enabled": true,
+    "model_dir": "models_a2bs/MNN/UniTalker-MNN"
+  },
+  "telegram": {
+    "enabled": false,
+    "bot_token": "YOUR_BOT_TOKEN",
+    "allowed_user_ids": []
+  },
+  "skills": [
+    {
+      "name": "finmind",
+      "description": "FinMind API 操作說明",
+      "keywords": ["股票", "股價", "台積電", "匯率", "finmind"],
+      "prompt_file": "skills/finmind.md"
+    },
+    {
+      "name": "query_stock_price",
+      "description": "查詢台股即時股價",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "stock_id": {"type": "string", "description": "股票代號如 2330"},
+          "days": {"type": "integer", "description": "查詢天數"}
+        },
+        "required": ["stock_id"]
+      },
+      "command": "/opt/homebrew/bin/python3.11 -c \"from skills.finmind_tool import taiwan_stock_price; print(taiwan_stock_price('{stock_id}', {days}))\""
+    }
+  ]
+}

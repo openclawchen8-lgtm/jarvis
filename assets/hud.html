@@ -1,0 +1,1654 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JARVIS HUD</title>
+
+<style>
+:root {
+  --glow: #00d4ff;
+  --glow-dim: rgba(0, 180, 255, 0.3);
+  --bg: #0a0e17;
+  --panel: rgba(10, 20, 40, 0.85);
+  --text: #c0d0e0;
+  --text-bright: #e0f0ff;
+  --accent: #00d4ff;
+  --danger: #ff3355;
+  --success: #00ff88;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Courier New', 'SF Mono', monospace;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    linear-gradient(rgba(0, 180, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 180, 255, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+.hud { position: relative; z-index: 1; height: 100vh; display: flex; flex-direction: column; }
+
+/* Top bar */
+.top-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--glow-dim);
+  background: var(--panel);
+  flex-wrap: wrap; gap: 8px;
+}
+.logo {
+  font-size: 20px; font-weight: bold;
+  color: var(--glow);
+  text-shadow: 0 0 20px var(--glow-dim), 0 0 40px rgba(0,180,255,0.1);
+  letter-spacing: 3px;
+}
+.status-group { display: flex; align-items: center; gap: 16px; font-size: 12px; }
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 8px var(--success);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+.status-dot.busy { background: #ffaa00; box-shadow: 0 0 8px #ffaa00; }
+.status-dot.error { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+.status-label { color: var(--glow); text-transform: uppercase; letter-spacing: 1px; }
+
+/* Main area */
+.main-area {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: flex-start; padding: 20px; position: relative;
+  min-height: 0;
+  gap: 15px;
+}
+
+/* Avatar */
+.avatar-frame {
+  width: 200px; height: 200px; border-radius: 50%;
+  border: 2px solid var(--glow-dim);
+  box-shadow: 0 0 30px rgba(0, 180, 255, 0.15), inset 0 0 30px rgba(0, 180, 255, 0.05);
+  overflow: hidden;
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 20, 40, 0.5);
+  margin-bottom: 20px;
+  flex-shrink: 0;
+}
+.avatar-placeholder {
+  font-size: 60px; color: var(--glow-dim);
+  text-align: center; line-height: 1.4;
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; height: 100%;
+  position: relative; z-index: 0;
+}
+
+/* Blink overlay */
+#blink-overlay {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.85);
+  border-radius: 50%;
+  opacity: 0; pointer-events: none; z-index: 2;
+  transition: opacity 0.03s;
+}
+
+/* Mouth overlay for viseme sync */
+#mouth-overlay {
+  position: absolute;
+  bottom: 20%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 28%;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(20, 10, 30, 0.8);
+  pointer-events: none; z-index: 2;
+}
+#blink-overlay.active { opacity: 0.95; }
+
+/* Speaking pulse (handled by JS inline styles) */
+
+.avatar-frame.speaking {
+  box-shadow: 0 0 50px rgba(0, 180, 255, 0.4), inset 0 0 30px rgba(0, 180, 255, 0.1);
+}
+
+/* Status text */
+.status-text {
+  font-size: 13px; color: var(--glow-dim);
+  letter-spacing: 2px; text-transform: uppercase;
+  margin-bottom: 10px; min-height: 20px;
+  transition: color 0.3s;
+}
+.status-text.active { color: var(--glow); }
+
+/* Speech bubble */
+.speech-bubble {
+  max-width: 500px; text-align: center;
+  font-size: 15px; color: var(--text-bright);
+  min-height: 40px; line-height: 1.6;
+  padding: 10px 20px;
+  border: 1px solid var(--glow-dim);
+  border-radius: 8px;
+  background: rgba(0, 20, 40, 0.6);
+  margin-bottom: 10px;
+  display: none;
+}
+.speech-bubble.visible { display: block; }
+
+/* Chat area */
+.chat-area {
+  flex: 0 0 auto; max-height: 200px; overflow-y: auto;
+  padding: 10px 24px;
+  border-top: 1px solid var(--glow-dim);
+  background: var(--panel);
+}
+.chat-area::-webkit-scrollbar { width: 4px; }
+.chat-area::-webkit-scrollbar-track { background: transparent; }
+.chat-area::-webkit-scrollbar-thumb { background: var(--glow-dim); border-radius: 2px; }
+.msg {
+  display: flex; margin-bottom: 6px; font-size: 13px;
+  animation: fadeIn 0.3s ease;
+  max-width: 100%;
+}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+.msg .who { min-width: 60px; flex-shrink: 0; font-weight: bold; }
+.msg.user .who { color: var(--glow); }
+.msg.jarvis .who { color: var(--success); }
+.msg .body { color: var(--text); word-break: break-word; overflow-wrap: break-word; white-space: pre-wrap; }
+.msg.error .who { color: var(--danger); }
+.msg.error .body { color: var(--danger); opacity: 0.8; }
+
+/* Input area */
+.input-area {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 24px;
+  border-top: 1px solid var(--glow-dim);
+  background: var(--panel);
+}
+.input-area input {
+  flex: 1; background: rgba(0, 20, 40, 0.6);
+  border: 1px solid var(--glow-dim); border-radius: 4px;
+  padding: 10px 14px; color: var(--text-bright);
+  font-family: inherit; font-size: 14px; outline: none;
+  transition: border-color 0.3s;
+}
+.input-area input:focus { border-color: var(--glow); }
+.input-area input::placeholder { color: rgba(192, 208, 224, 0.3); }
+.btn {
+  background: transparent; border: 1px solid var(--glow-dim);
+  color: var(--glow); padding: 10px 16px; border-radius: 4px;
+  cursor: pointer; font-family: inherit; font-size: 13px;
+  transition: all 0.2s; white-space: nowrap;
+}
+.btn:hover { background: rgba(0, 180, 255, 0.1); border-color: var(--glow); }
+.btn:active { transform: scale(0.96); }
+.btn.recording { background: rgba(255, 51, 85, 0.2); border-color: var(--danger); color: var(--danger); animation: recPulse 1s infinite; }
+@keyframes recPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.model-select {
+  background: rgba(0,20,40,0.6); border: 1px solid var(--glow-dim);
+  color: var(--glow); font-family: inherit; font-size: 12px;
+  padding: 4px 8px; border-radius: 4px; cursor: pointer; outline: none;
+}
+.model-select option { background: #0a0e17; color: var(--text); }
+#faceCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 3; }
+
+/* Connection status */
+.connecting-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: var(--bg);
+  gap: 20px;
+}
+.connecting-overlay.hidden { display: none; }
+.connecting-overlay .spinner {
+  width: 40px; height: 40px;
+  border: 2px solid var(--glow-dim);
+  border-top-color: var(--glow);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.connecting-overlay .text { font-size: 14px; color: var(--glow-dim); letter-spacing: 2px; }
+.connecting-overlay .retry-btn { margin-top: 10px; }
+
+/* Responsive */
+@media (max-width: 600px) {
+  .avatar-frame { width: 140px; height: 140px; }
+  .avatar-placeholder { font-size: 40px; }
+  .speech-bubble { font-size: 13px; }
+  .top-bar { padding: 8px 12px; flex-wrap: wrap; gap: 8px; }
+  .logo { font-size: 16px; }
+}
+</style>
+</head>
+<body>
+
+<div class="connecting-overlay" id="connOverlay">
+  <div class="spinner"></div>
+  <div class="text" id="connText">正在與 JARVIS 建立連線...</div>
+  <button class="btn retry-btn" id="retryBtn" style="display:none" onclick="connect()">重新連線</button>
+</div>
+
+<div class="hud">
+  <div class="top-bar">
+    <div class="logo">◈ JARVIS</div>
+    <div class="status-group">
+      <select id="modelSelect" class="model-select"></select>
+      <select id="rendererSelect" class="model-select" onchange="switchRenderer(this.value)">
+        <option value="image">Image Avatar</option>
+        <option value="canvas">Canvas 2D</option>
+        <option value="liteavatar">LiteAvatar 2D</option>
+        <option value="vrm" disabled>3D VRM</option>
+      </select>
+      <select id="imageAvatarSelect" class="model-select" style="display:none" onchange="switchImageAvatar(this.value)">
+        <option value="/assets/img/face.jpeg">大頭照</option>
+        <option value="/assets/img/full-body.jpeg">全身照</option>
+      </select>
+      <select id="liteavatarSelect" class="model-select" style="display:none" onchange="switchLiteAvatar(this.value)">
+        <option value="">載入頭像清單...</option>
+      </select>
+      <span class="status-dot" id="statusDot"></span>
+      <span class="status-label" id="statusLabel">待命</span>
+      <span style="color:var(--glow-dim);font-size:11px" id="pingDisplay">-- ms</span>
+    </div>
+  </div>
+
+  <div class="main-area">
+    <div class="avatar-frame idle" id="avatarFrame">
+      <div class="avatar-placeholder" id="avatarPlaceholder">◈<br>JARVIS</div>
+      <div id="blink-overlay"></div>
+      <div id="mouth-overlay"></div>
+      <canvas id="faceCanvas" width="200" height="200"></canvas>
+      <video id="liteavatarVideo" muted playsinline onended="_onLiteAvatarVideoEnd()" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:3;opacity:0;transition:opacity 0.3s;"></video>
+    </div>
+    <div class="status-text" id="statusText">● SYSTEM STANDBY</div>
+    <div class="speech-bubble" id="speechBubble"></div>
+  </div>
+
+  <div class="chat-area" id="chatArea"></div>
+
+  <div class="input-area">
+    <input type="text" id="textInput" placeholder="輸入訊息..." autofocus>
+    <button class="btn" id="micBtn">🎤 錄音</button>
+    <button class="btn" id="sendBtn">➤ 送出</button>
+  </div>
+</div>
+
+<script>
+// ============================================================================
+// WebSocket
+// ============================================================================
+const WS_URL = `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws/chat`;
+let ws = null;
+let reconnectTimer = null;
+
+function connect() {
+  document.getElementById('retryBtn').style.display = 'none';
+  document.getElementById('connOverlay').classList.remove('hidden');
+  document.getElementById('connText').textContent = '正在與 JARVIS 建立連線...';
+
+  if (ws) { ws.onclose = null; ws.close(); }
+
+  ws = new WebSocket(WS_URL);
+
+  ws.onopen = () => {
+    document.getElementById('connOverlay').classList.add('hidden');
+    setStatus('ready', '待命');
+    addChatEntry('system', '已連線到 JARVIS');
+    document.getElementById('textInput').disabled = false;
+    document.getElementById('sendBtn').disabled = false;
+    document.getElementById('micBtn').disabled = false;
+    loadModelList();
+  };
+
+  ws.onclose = () => {
+    setStatus('error', '離線');
+    document.getElementById('connOverlay').classList.remove('hidden');
+    document.getElementById('connText').textContent = '連線中斷，正在重試...';
+    document.getElementById('retryBtn').style.display = 'block';
+    document.getElementById('textInput').disabled = true;
+    document.getElementById('sendBtn').disabled = true;
+    document.getElementById('micBtn').disabled = true;
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(connect, 3000);
+  };
+
+  ws.onerror = () => {};
+
+  ws.onmessage = (e) => {
+    let data;
+    try { data = JSON.parse(e.data); } catch { return; }
+
+    if (data.type === 'pong') return;
+    setStatus('ready', '待命');
+
+    if (data.error) {
+      addChatEntry('error', data.error);
+      setSpeech(data.error, true);
+      return;
+    }
+
+    if (data.transcription) {
+      addChatEntry('user', data.transcription);
+    }
+
+    if (data.response) {
+      addChatEntry('jarvis', data.response);
+      setSpeech(data.response);
+      const hasViseme = data.viseme_track && data.viseme_track.frames;
+      const hasBlendshape = data.blendshape && data.blendshape.coeffs && data.blendshape.coeffs.length > 0;
+      if (data.audio) {
+        playAudioWithViseme(data.audio, data.viseme_track, data.blendshape);
+      } else if (hasBlendshape) {
+        canvasRenderer.play(data.blendshape, performance.now());
+      } else if (hasViseme) {
+        playVisemeSequence(data.viseme_track, null);
+      }
+    }
+  };
+}
+
+
+
+function sendText(text) {
+  if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({type: 'text', content: text}));
+  setStatus('busy', '思考中');
+  setSpeech('...');
+}
+
+function sendPing() {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    const t0 = performance.now();
+    ws.send(JSON.stringify({type: 'ping'}));
+    ws.addEventListener('message', function handler(e) {
+      const d = JSON.parse(e.data);
+      if (d.type === 'pong') {
+        document.getElementById('pingDisplay').textContent =
+          Math.round(performance.now() - t0) + ' ms';
+        ws.removeEventListener('message', handler);
+      }
+    }, {once: true});
+  }
+}
+setInterval(sendPing, 60000);
+
+// ============================================================================
+// UI Helpers
+// ============================================================================
+function setStatus(state, label) {
+  const dot = document.getElementById('statusDot');
+  const lbl = document.getElementById('statusLabel');
+  dot.className = 'status-dot ' + (state === 'busy' ? 'busy' : state === 'error' ? 'error' : '');
+  lbl.textContent = label;
+}
+
+function addChatEntry(who, text) {
+  const area = document.getElementById('chatArea');
+  const div = document.createElement('div');
+  div.className = 'msg ' + (['user','jarvis','error','system'].includes(who) ? who : '');
+  div.innerHTML = `<span class="who">${who === 'user' ? '👤 你' : who === 'jarvis' ? '🤖 JARVIS' : who === 'error' ? '⚠︎ 錯誤' : '⚡ 系統'}</span><span class="body">${who === 'jarvis' ? formatMessage(text) : escapeHtml(text)}</span>`;
+  area.appendChild(div);
+  area.scrollTop = area.scrollHeight;
+}
+
+function setSpeech(text, isError) {
+  const bubble = document.getElementById('speechBubble');
+  if (!text) { bubble.classList.remove('visible'); return; }
+  bubble.textContent = text;
+  bubble.className = 'speech-bubble visible' + (isError ? ' error' : '');
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function formatMessage(text) {
+  if (!text) return '';
+  // 把 /assets/charts/xxx.png 轉為 <img>
+  let html = escapeHtml(text);
+  html = html.replace(/\/assets\/charts\/[^\s<]+(?:png|jpg|gif)/g, function(m) {
+    return '<br><img src="' + m + '" style="max-width:100%;border-radius:8px;border:1px solid rgba(0,180,255,0.3);margin:8px 0;">';
+  });
+  // 換行轉 <br>
+  html = html.replace(/\n/g, '<br>');
+  return html;
+}
+
+// ============================================================================
+// Canvas 2D Face Renderer — A2BS blendshape driven
+// ============================================================================
+class CanvasFaceRenderer {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.w = canvas.width;
+    this.h = canvas.height;
+    this.queue = [];
+    this.idx = 0;
+    this.startTime = 0;
+    this.fps = 20;
+    this.timer = null;
+
+    // Interpolation state
+    this._prevCoeffs = null;
+    this._nextCoeffs = null;
+    this._interpT = 0;
+
+    // Blink state (driven by blendshape or timer)
+    this._blinkState = 0; // 0=open, 0->1 closing, 1->0 opening
+    this._blinkTimer = 0;
+    this._autoBlink = true;
+
+    // Gaze
+    this._gazeX = 0;
+    this._gazeY = 0;
+
+    // Performance
+    this._headGradCache = null;
+    this._headGradKey = '';
+    this._playing = false;
+
+    // Resize observer
+    this._ro = new ResizeObserver(() => this._resize());
+    this._ro.observe(canvas.parentElement);
+    this._resize();
+
+    // Idle animation loop (gentle breathing/eye movement when no speech)
+    this._idleTimer = null;
+    this._idlePhase = 0;
+    this._startIdleLoop();
+  }
+
+  _startIdleLoop() {
+    const loop = () => {
+      this._tick();
+      this._idleTimer = requestAnimationFrame(loop);
+    };
+    this._idleTimer = requestAnimationFrame(loop);
+  }
+
+  _drawIdle() {
+    const ctx = this.ctx;
+    const W = this.w, H = this.h;
+    const cx = W / 2, cy = H / 2;
+    const scale = W / 200;
+    ctx.clearRect(0, 0, W, H);
+
+    // Gentle breathing (subtle scale bounce)
+    const breathe = Math.sin(this._idlePhase) * 0.003;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(1 + breathe, 1 + breathe);
+    ctx.translate(-cx, -cy);
+
+    const headCY = cy;
+    const headRX = 72 * scale, headRY = 88 * scale;
+    if (!this._idleGrad) {
+      const g = ctx.createRadialGradient(cx - 15 * scale, headCY - 25 * scale, 10 * scale, cx, headCY, headRY);
+      g.addColorStop(0, 'rgba(80,120,170,0.88)');
+      g.addColorStop(0.3, 'rgba(55,90,140,0.92)');
+      g.addColorStop(0.6, 'rgba(35,60,100,0.94)');
+      g.addColorStop(1, 'rgba(18,32,55,0.96)');
+      this._idleGrad = g;
+    }
+    ctx.beginPath();
+    ctx.ellipse(cx, headCY, headRX, headRY, 0, 0, Math.PI * 2);
+    ctx.fillStyle = this._idleGrad;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,220,255,0.35)';
+    ctx.lineWidth = 2 * scale;
+    ctx.stroke();
+
+    // Outer glow
+    ctx.beginPath();
+    ctx.ellipse(cx, headCY, headRX + 2 * scale, headRY + 2 * scale, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(0,220,255,${0.1 + Math.sin(this._idlePhase * 0.5) * 0.05})`;
+    ctx.lineWidth = 3 * scale;
+    ctx.stroke();
+
+    // Eyes
+    const eyeY = 78 * scale, eyeSpacing = 26 * scale;
+    let blinkValue = 0;
+    if (this._blinkState > 0 && this._blinkState < 2) {
+      blinkValue = this._blinkState <= 1 ? this._blinkState : 2 - this._blinkState;
+    }
+
+    for (let side = -1; side <= 1; side += 2) {
+      const ex = cx + side * eyeSpacing;
+      const browY = eyeY - 15 * scale;
+      const eH = Math.max(3 * scale, 10 * scale - blinkValue * 9 * scale);
+
+      // Eyebrow
+      ctx.beginPath();
+      ctx.moveTo(ex - 13 * scale, browY);
+      ctx.quadraticCurveTo(ex, browY - 4 * scale, ex + 13 * scale, browY - 2 * scale);
+      ctx.strokeStyle = 'rgba(0,220,255,0.5)';
+      ctx.lineWidth = 2.5 * scale;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      if (blinkValue > 0.85) {
+        ctx.beginPath();
+        ctx.moveTo(ex - eyeW / 2 - 2 * scale, eyeY);
+        ctx.lineTo(ex + eyeW / 2 + 2 * scale, eyeY);
+        ctx.strokeStyle = `rgba(0,220,255,${0.4 + blinkValue * 0.2})`;
+        ctx.lineWidth = 2 * scale;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        continue;
+      }
+
+      ctx.beginPath();
+      ctx.ellipse(ex, eyeY, 9 * scale, eH / 2, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(200,225,240,0.9)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,200,255,0.25)';
+      ctx.lineWidth = 1 * scale;
+      ctx.stroke();
+
+      if (blinkValue < 0.7) {
+        const gazeOffX = side * this._gazeX * 2 * scale;
+        const gazeOffY = this._gazeY * 2 * scale;
+        ctx.beginPath();
+        ctx.arc(ex + gazeOffX, eyeY + 1 * scale + gazeOffY, 4 * scale, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(50,100,180,0.7)';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(ex + gazeOffX + 0.5 * scale, eyeY + 0.5 * scale + gazeOffY, 2 * scale, 0, Math.PI * 2);
+        ctx.fillStyle = '#1a2a45';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(ex + gazeOffX - 1.5 * scale, eyeY - 1 * scale + gazeOffY, 1.5 * scale, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.fill();
+      }
+    }
+
+    // Nose
+    ctx.beginPath();
+    ctx.moveTo(cx, 88 * scale);
+    ctx.lineTo(cx, 107 * scale);
+    ctx.strokeStyle = 'rgba(0,200,255,0.25)';
+    ctx.lineWidth = 1.5 * scale;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(cx - 5 * scale, 109 * scale, 3.5 * scale, 2.5 * scale, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx + 5 * scale, 109 * scale, 3.5 * scale, 2.5 * scale, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,200,255,0.15)';
+    ctx.fill();
+
+    // Mouth (closed, subtle)
+    ctx.beginPath();
+    ctx.moveTo(cx - 28 * scale, 132 * scale);
+    ctx.quadraticCurveTo(cx, 130 * scale, cx + 28 * scale, 132 * scale);
+    ctx.strokeStyle = 'rgba(0,220,255,0.5)';
+    ctx.lineWidth = 2.5 * scale;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  _resize() {
+    const parent = this.canvas.parentElement;
+    const rect = parent.getBoundingClientRect();
+    const size = Math.max(rect.width, rect.height);
+    const dpr = this.dpr;
+    const w = Math.round(size * dpr);
+    const h = Math.round(size * dpr);
+    if (w !== this.canvas.width || h !== this.canvas.height) {
+      this.canvas.width = w;
+      this.canvas.height = h;
+      this.w = w;
+      this.h = h;
+      this._headGradCache = null;
+    }
+  }
+
+  play(msg, startTime) {
+    this.stop();
+    if (!msg || !msg.coeffs || msg.coeffs.length === 0) return;
+    this.queue = msg.coeffs;
+    this.fps = msg.fps || 20;
+    this.idx = 0;
+    this.startTime = startTime || performance.now();
+    this._autoBlink = false;
+    this._blinkState = 0;
+    this._prevCoeffs = null;
+    this._nextCoeffs = null;
+    this._playing = true;
+  }
+
+  stop() {
+    this._playing = false;
+    this.queue = [];
+    this.idx = 0;
+    this._prevCoeffs = null;
+    this._nextCoeffs = null;
+    this._autoBlink = true;
+    this._blinkState = 0;
+  }
+
+  _tick() {
+    if (this._playing && this.queue.length > 0) {
+      const elapsed = performance.now() - this.startTime;
+      const frameMs = 1000 / this.fps;
+      const exactIdx = elapsed / frameMs;
+      const targetIdx = Math.min(Math.floor(exactIdx), this.queue.length - 1);
+      const nextIdx = Math.min(targetIdx + 1, this.queue.length - 1);
+      const frac = exactIdx - Math.floor(exactIdx);
+
+      if (targetIdx < this.queue.length) {
+        this._prevCoeffs = this.queue[targetIdx];
+        this._nextCoeffs = this.queue[nextIdx];
+        this._interpT = frac;
+        this._draw(this._prevCoeffs);
+      }
+      if (targetIdx >= this.queue.length) {
+        this._playing = false;
+        this._autoBlink = true;
+      }
+    } else {
+      this._tickIdle();
+      this._drawIdle();
+    }
+  }
+
+  _tickIdle() {
+    this._idlePhase += 0.03;
+    this._blinkTimer += 16;
+    if (this._blinkState > 0) {
+      // Blink in progress
+      this._blinkState += 0.08;
+      if (this._blinkState >= 2) this._blinkState = 0;
+    } else if (this._blinkTimer > 2500 + Math.random() * 3000) {
+      this._blinkState = 0.01;
+      this._blinkTimer = 0;
+    }
+    // Subtle gaze drift
+    this._gazeX += (Math.random() - 0.5) * 0.02;
+    this._gazeY += (Math.random() - 0.5) * 0.02;
+    this._gazeX *= 0.98;
+    this._gazeY *= 0.98;
+  }
+
+  _lerp(a, b, t) {
+    if (a === undefined || b === undefined) return a ?? b ?? 0;
+    return a + (b - a) * t;
+  }
+
+  _lerpArr(a, b, t) {
+    if (!a || !b) return a || b;
+    const out = [];
+    for (let i = 0; i < Math.min(a.length, b.length); i++) {
+      out[i] = a[i] + (b[i] - a[i]) * t;
+    }
+    return out;
+  }
+
+  _draw(rawCoeffs) {
+    const ctx = this.ctx;
+    const W = this.w, H = this.h;
+    const cx = W / 2, cy = H / 2;
+    const scale = W / 200;
+
+    // Interpolate coefficients
+    let c = rawCoeffs;
+    if (c && this._prevCoeffs && this._nextCoeffs && this._prevCoeffs !== this._nextCoeffs) {
+      c = this._lerpArr(this._prevCoeffs, this._nextCoeffs, this._interpT);
+    }
+    // Fallback neutral
+    const isIdle = !c || c.length < 53;
+
+    const expr = isIdle ? new Array(50).fill(0) : c.slice(0, 50);
+    const jx = (c && c[50]) || 0;
+    const jy = (c && c[51]) || 0;
+    const jz = (c && c[52]) || 0;
+
+    ctx.clearRect(0, 0, W, H);
+
+    // Head transform
+    ctx.save();
+    ctx.translate(cx, cy);
+    const headTilt = jx * 0.15 + this._gazeY * 0.02;
+    ctx.rotate(headTilt);
+    const turn = Math.max(-0.2, Math.min(0.2, jy * 0.08 + this._gazeX * 0.015));
+    ctx.scale(1 - turn, 1);
+    ctx.translate(-cx, -cy);
+
+    // Expression values (with idle smoothing)
+    const jawOpenRaw = isIdle ? 0 : Math.max(0, Math.min(1, (-jz + 0.4) / 1.0));
+    const jawOpen = jawOpenRaw;
+    const jawDrop = jawOpen * 16 * scale;
+
+    const e = (i, def) => isIdle ? (def ?? 0) : (expr[i] || 0);
+    const browRaiseL = Math.max(-2, Math.min(6, e(0) * 6));
+    const browRaiseR = Math.max(-2, Math.min(6, e(2) * 6));
+    const squintL = Math.max(0, e(1)) * 5;
+    const squintR = Math.max(0, e(3)) * 5;
+    const furrow = Math.max(0, e(4)) * 4;
+    const pucker = Math.max(0, e(5)) * 10;
+    const stretch = Math.max(0, e(6)) * 8;
+    const smileInt = Math.max(0, e(7)) * 5;
+
+    // --- Head ---
+    const headRX = 72 * scale, headRY = (88 + jawDrop * 0.4) * scale;
+    const headCY = cy + jawDrop * 0.25 * scale;
+    const gradKey = `${headRX},${headRY},${headCY}`;
+    if (this._headGradKey !== gradKey || !this._headGradCache) {
+      this._headGradKey = gradKey;
+      const g = ctx.createRadialGradient(cx - 15 * scale, headCY - 25 * scale, 10 * scale, cx, headCY, headRY);
+      g.addColorStop(0, 'rgba(80,120,170,0.88)');
+      g.addColorStop(0.3, 'rgba(55,90,140,0.92)');
+      g.addColorStop(0.6, 'rgba(35,60,100,0.94)');
+      g.addColorStop(1, 'rgba(18,32,55,0.96)');
+      this._headGradCache = g;
+    }
+    ctx.beginPath();
+    ctx.ellipse(cx, headCY, headRX, headRY, 0, 0, Math.PI * 2);
+    ctx.fillStyle = this._headGradCache;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,220,255,0.4)';
+    ctx.lineWidth = 2 * scale;
+    ctx.stroke();
+
+    // Outer glow
+    ctx.beginPath();
+    ctx.ellipse(cx, headCY, headRX + 2 * scale, headRY + 2 * scale, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(0,220,255,${0.1 + jawOpen * 0.06})`;
+    ctx.lineWidth = 3 * scale;
+    ctx.stroke();
+
+    // --- Eyes ---
+    const eyeY = 78 * scale, eyeSpacing = 26 * scale;
+    const eyeW = 18 * scale, eyeH = 10 * scale;
+
+    // Blink value: 0=open, 1=closed (from timer or blendshape-driven)
+    let blinkValue = 0;
+    if (this._blinkState > 0 && this._blinkState < 2) {
+      blinkValue = this._blinkState <= 1 ? this._blinkState : 2 - this._blinkState;
+    }
+
+    for (let side = -1; side <= 1; side += 2) {
+      const ex = cx + side * eyeSpacing;
+      const browY = eyeY - 15 * scale - (side === -1 ? browRaiseL : browRaiseR) * scale;
+      const squint = (side === -1 ? squintL : squintR) * scale;
+      const eH = Math.max(3 * scale, eyeH - squint - blinkValue * eyeH * 0.9);
+
+      // Eyebrow
+      ctx.beginPath();
+      ctx.moveTo(ex - 13 * scale, browY);
+      ctx.quadraticCurveTo(ex, browY - 4 * scale, ex + 13 * scale, browY - 2 * scale);
+      ctx.strokeStyle = `rgba(0,220,255,${0.5 + (side === -1 ? browRaiseL : browRaiseR) * 0.05})`;
+      ctx.lineWidth = 2.5 * scale;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      if (blinkValue > 0.85) {
+        // Nearly closed — single line
+        ctx.beginPath();
+        ctx.moveTo(ex - eyeW / 2 - 2 * scale, eyeY);
+        ctx.lineTo(ex + eyeW / 2 + 2 * scale, eyeY);
+        ctx.strokeStyle = `rgba(0,220,255,${0.4 + blinkValue * 0.2})`;
+        ctx.lineWidth = 2 * scale;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        continue;
+      }
+
+      // Eye white
+      ctx.beginPath();
+      ctx.ellipse(ex, eyeY, eyeW / 2, eH / 2, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(200,225,240,0.9)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,200,255,0.25)';
+      ctx.lineWidth = 1 * scale;
+      ctx.stroke();
+
+      // Upper eyelid crease
+      ctx.beginPath();
+      ctx.moveTo(ex - eyeW / 2, eyeY - eH / 2 + 1 * scale);
+      ctx.quadraticCurveTo(ex, eyeY - eH / 2 - 3 * scale, ex + eyeW / 2, eyeY - eH / 2 + 1 * scale);
+      ctx.strokeStyle = 'rgba(0,200,255,0.15)';
+      ctx.lineWidth = 1.5 * scale;
+      ctx.stroke();
+
+      // Lower eyelid hint
+      ctx.beginPath();
+      ctx.moveTo(ex - eyeW / 2 + 2 * scale, eyeY + eH / 2 - 1 * scale);
+      ctx.quadraticCurveTo(ex, eyeY + eH / 2 + 2 * scale, ex + eyeW / 2 - 2 * scale, eyeY + eH / 2 - 1 * scale);
+      ctx.strokeStyle = `rgba(0,200,255,${0.05 + (1 - blinkValue) * 0.05})`;
+      ctx.lineWidth = 1 * scale;
+      ctx.stroke();
+
+      if (blinkValue < 0.7) {
+        // Iris
+        const irisR = (4 - blinkValue * 2) * scale;
+        const gazeOffX = (side * this._gazeX * 1.5 + jy * 4) * scale;
+        const gazeOffY = (this._gazeY * 1.5 - jx * 3) * scale;
+
+        ctx.beginPath();
+        ctx.arc(ex + gazeOffX, eyeY + 1 * scale + gazeOffY, irisR, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(50,100,180,${0.7 - blinkValue * 0.3})`;
+        ctx.fill();
+
+        // Pupil
+        ctx.beginPath();
+        ctx.arc(ex + gazeOffX + 0.5 * scale, eyeY + 0.5 * scale + gazeOffY, (2 - blinkValue) * scale, 0, Math.PI * 2);
+        ctx.fillStyle = '#1a2a45';
+    if (furrow > 0.5) {
+      ctx.beginPath();
+      ctx.moveTo(cx - 3 * scale, eyeY - 20 * scale);
+      ctx.lineTo(cx + 3 * scale, eyeY - 20 * scale);
+      ctx.strokeStyle = `rgba(0,200,255,${Math.min(0.5, furrow * 0.1)})`;
+      ctx.lineWidth = 1.5 * scale;
+      ctx.stroke();
+    }
+
+    // --- Nose ---
+    const noseTipY = (107 + jawDrop * 0.3) * scale;
+    ctx.beginPath();
+    ctx.moveTo(cx, 88 * scale);
+    ctx.lineTo(cx, noseTipY);
+    ctx.strokeStyle = 'rgba(0,200,255,0.25)';
+    ctx.lineWidth = 1.5 * scale;
+    ctx.stroke();
+
+    // Nostrils (subtle)
+    const nostrilY = (109 + jawDrop * 0.3) * scale;
+    ctx.beginPath();
+    ctx.ellipse(cx - 5 * scale, nostrilY, 3.5 * scale, 2.5 * scale, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx + 5 * scale, nostrilY, 3.5 * scale, 2.5 * scale, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,200,255,0.18)';
+    ctx.fill();
+
+    // Nasal flare (reacts to expression)
+    const flareInt = Math.min(0.15, Math.max(0, expr[4] || 0) * 0.03);
+    if (flareInt > 0.02) {
+      ctx.beginPath();
+      ctx.ellipse(cx - 5 * scale, nostrilY, 4.5 * scale * (1 + flareInt), 2.5 * scale, 0, 0, Math.PI * 2);
+      ctx.ellipse(cx + 5 * scale, nostrilY, 4.5 * scale * (1 + flareInt), 2.5 * scale, 0, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(0,200,255,${0.08 + flareInt})`;
+      ctx.fill();
+    }
+
+    // --- Nasolabial folds ---
+    if (smileInt > 0.5 || !isIdle) {
+      const nfAlpha = isIdle ? 0.03 : Math.min(0.2, smileInt * 0.03);
+      if (nfAlpha > 0.01) {
+        ctx.strokeStyle = `rgba(0,200,255,${nfAlpha})`;
+        ctx.lineWidth = 1 * scale;
+        ctx.beginPath();
+        ctx.moveTo(cx - 18 * scale, (115 + jawDrop * 0.2) * scale);
+        ctx.quadraticCurveTo(
+          cx - 22 * scale, (128 + jawDrop * 0.4) * scale,
+          cx - (28 + stretch * 0.5) * scale, (132 + jawDrop * 0.5) * scale
+        );
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(cx + 18 * scale, (115 + jawDrop * 0.2) * scale);
+        ctx.quadraticCurveTo(
+          cx + 22 * scale, (128 + jawDrop * 0.4) * scale,
+          cx + (28 + stretch * 0.5) * scale, (132 + jawDrop * 0.5) * scale
+        );
+        ctx.stroke();
+      }
+    }
+
+    // --- Cheek bulge on smile ---
+    if (smileInt > 1) {
+      const cheekAlpha = Math.min(0.1, smileInt * 0.015);
+      const cheekSpread = 15 * scale;
+      ctx.beginPath();
+      ctx.ellipse(cx - 28 * scale, (122 + jawDrop * 0.3) * scale, 8 * scale + cheekSpread * 0.3, 5 * scale, 0, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(0,200,255,${cheekAlpha})`;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(cx + 28 * scale, (122 + jawDrop * 0.3) * scale, 8 * scale + cheekSpread * 0.3, 5 * scale, 0, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(0,200,255,${cheekAlpha})`;
+      ctx.fill();
+    }
+
+    // --- Mouth ---
+    const mW = Math.max(8 * scale, (28 + stretch - pucker) * scale);
+    const mH = (1 + jawOpen * 22) * scale;
+    const mouthY = (132 + jawDrop * 0.5) * scale;
+
+    // Upper lip (Cupid's bow)
+    ctx.beginPath();
+    ctx.moveTo(cx - mW, mouthY);
+    ctx.quadraticCurveTo(cx - mW * 0.5, mouthY - 5 * scale + jawOpen * 2 * scale, cx - mW * 0.15, mouthY - 2 * scale);
+    ctx.quadraticCurveTo(cx, mouthY - 6 * scale + jawOpen * 2 * scale, cx + mW * 0.15, mouthY - 2 * scale);
+    ctx.quadraticCurveTo(cx + mW * 0.5, mouthY - 5 * scale + jawOpen * 2 * scale, cx + mW, mouthY);
+    ctx.strokeStyle = `rgba(0,220,255,${0.55 + smileInt * 0.03})`;
+    ctx.lineWidth = 2 * scale;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+
+    if (jawOpen > 0.02) {
+      // Mouth cavity
+      ctx.beginPath();
+      ctx.moveTo(cx - mW, mouthY);
+      ctx.quadraticCurveTo(cx, mouthY + mH, cx + mW, mouthY);
+      ctx.fillStyle = 'rgba(0,0,0,0.75)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,220,255,0.3)';
+      ctx.lineWidth = 1.5 * scale;
+      ctx.stroke();
+
+      // Lower lip
+      ctx.beginPath();
+      ctx.moveTo(cx - mW, mouthY + mH);
+      ctx.quadraticCurveTo(cx, mouthY + mH + 4 * scale, cx + mW, mouthY + mH);
+      ctx.strokeStyle = 'rgba(0,220,255,0.4)';
+      ctx.lineWidth = 2 * scale;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      // Teeth (individual tooth hints when moderately open)
+      if (jawOpen > 0.08 && jawOpen < 0.7) {
+        const teethY = mouthY + mH * 0.35;
+        const teethH = mH * 0.15;
+        ctx.fillStyle = 'rgba(200,220,240,0.12)';
+        const numTeeth = 6;
+        const toothSpacing = (mW * 2) / (numTeeth + 1);
+        for (let i = 0; i < numTeeth; i++) {
+          const tx = cx - mW + toothSpacing * (i + 1);
+          const tw = Math.min(toothSpacing * 0.5, 4 * scale);
+          ctx.fillRect(tx - tw / 2, teethY, tw, teethH);
+        }
+      }
+
+      // Tongue when widely open
+      if (jawOpen > 0.35) {
+        const tongueOut = (jawOpen - 0.35) * 0.5;
+        ctx.beginPath();
+        ctx.ellipse(cx, mouthY + mH * 0.7 + tongueOut * 8 * scale, mW * 0.35, (5 + tongueOut * 8) * scale, 0, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(180,80,60,${0.4 + jawOpen * 0.2})`;
+        ctx.fill();
+      }
+    } else {
+      // Closed mouth
+      ctx.beginPath();
+      ctx.moveTo(cx - mW, mouthY);
+      ctx.quadraticCurveTo(cx, mouthY - (1 + smileInt * 1.5) * scale, cx + mW, mouthY);
+      ctx.strokeStyle = 'rgba(0,220,255,0.45)';
+      ctx.lineWidth = 2 * scale;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+    }
+
+    // Chin shadow
+    if (jawOpen > 0.05) {
+      ctx.beginPath();
+      ctx.ellipse(cx, mouthY + mH + 8 * scale + jawDrop * 0.3 * scale, mW * 0.8, 4 * scale, 0, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(0,0,0,${Math.min(0.15, jawOpen * 0.15)})`;
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+}
+
+let canvasRenderer = new CanvasFaceRenderer(document.getElementById('faceCanvas'));
+
+function switchRenderer(mode) {
+  const frame = document.getElementById('avatarFrame');
+  const canvas = document.getElementById('faceCanvas');
+  const video = document.getElementById('liteavatarVideo');
+  const placeholder = document.getElementById('avatarPlaceholder');
+  const blinkEl = document.getElementById('blink-overlay');
+  const mouthEl = document.getElementById('mouth-overlay');
+
+  const savedMode = localStorage.getItem('jarvisRenderer');
+  if (mode === undefined && savedMode) {
+    document.getElementById('rendererSelect').value = savedMode;
+    mode = savedMode;
+  }
+
+  // Stop all renderers first
+  canvasRenderer.stop();
+  video.pause();
+  video.src = '';
+  video.style.display = 'none';
+  canvas.style.display = 'none';
+  blinkEl.style.display = '';
+  mouthEl.style.display = '';
+  frame.classList.remove('canvas-mode');
+
+  if (mode === 'canvas') {
+    canvas.style.display = 'block';
+    placeholder.style.display = 'none';
+    blinkEl.style.display = 'none';
+    mouthEl.style.display = 'none';
+    stopIdleBlink();
+    frame.style.borderRadius = '50%';
+    frame.style.width = '200px';
+    frame.style.height = '200px';
+    frame.style.maxHeight = '200px';
+    frame.style.backgroundImage = '';
+    frame.classList.add('canvas-mode');
+    document.getElementById('liteavatarSelect').style.display = 'none';
+    document.getElementById('imageAvatarSelect').style.display = 'none';
+    localStorage.setItem('jarvisRenderer', 'canvas');
+
+  } else if (mode === 'liteavatar') {
+    placeholder.style.display = 'none';
+    blinkEl.style.display = 'none';
+    mouthEl.style.display = 'none';
+    stopIdleBlink();
+    frame.style.borderRadius = '16px';
+    frame.style.width = '360px';
+    frame.style.height = '540px';
+    frame.style.maxHeight = '70vh';
+    localStorage.setItem('jarvisRenderer', 'liteavatar');
+    video.style.opacity = '0';
+    // Show & populate LiteAvatar selector
+    const laSel = document.getElementById('liteavatarSelect');
+    laSel.style.display = 'inline-block';
+    if (laSel.options.length <= 1) {
+      fetchLiteAvatars();
+    } else if (laSel.value) {
+      switchLiteAvatar(laSel.value);
+    }
+    video.onplaying = () => { video.style.opacity = '1'; };
+    video.onended = () => { video.style.opacity = '0'; };
+    video.style.opacity = '0';
+
+  } else {
+    // image mode (default)
+    frame.classList.remove('canvas-mode');
+    localStorage.setItem('jarvisRenderer', 'image');
+    document.getElementById('liteavatarSelect').style.display = 'none';
+    document.getElementById('imageAvatarSelect').style.display = 'inline-block';
+    document.getElementById('liteavatarVideo').style.opacity = '0';
+    canvasRenderer.stop();
+    video.pause();
+    video.src = '';
+    video.style.display = 'none';
+    startIdleBlink();
+    const sel = document.getElementById('imageAvatarSelect');
+    if (sel.value) switchImageAvatar(sel.value);
+    else { placeholder.style.display = 'flex'; }
+  }
+}
+
+// ============================================================================
+// Viseme Animation — Audio-synced with idle blink + breathing
+// ============================================================================
+let visemeQueue = [];
+let visemeTimer = null;
+let blinkTimer = null;
+let currentAudio = null;
+const VISEMES = ['REST','A','B','C','D','E','F','G','I','O','U','W'];
+
+let speakPulseTimer = null;
+let speakPhase = 0;
+
+function applyViseme(id, openness) {
+  console.log('[VISEME] applyViseme id:', id, 'openness:', openness);
+  stopSpeakPulse();
+  const frame = document.getElementById('avatarFrame');
+  if (!frame) return;
+
+  // --- Mouth overlay: use viseme ID for discrete mouth shapes ---
+  const VISEME_MOUTH = {
+    0:  { h: 0,  w: 0  },  // REST
+    1:  { h: 52, w: 50 },  // A  - wide open
+    2:  { h: 0,  w: 0  },  // B  - closed
+    3:  { h: 16, w: 30 },  // C  - pursed (sh, ch, j)
+    4:  { h: 10, w: 24 },  // D  - slightly open (d, t, n)
+    5:  { h: 6,  w: 22 },  // E  - flat (eh, er)
+    6:  { h: 4,  w: 20 },  // F  - lip-teeth
+    7:  { h: 38, w: 42 },  // G  - open (g, k, h)
+    8:  { h: 24, w: 36 },  // I  - smile (iy, ih)
+    9:  { h: 30, w: 34 },  // O  - round (ow, ao)
+    10: { h: 12, w: 26 },  // U  - small round (uw, uh)
+    11: { h: 14, w: 28 },  // W  - pursed round
+  };
+  const mouthShape = VISEME_MOUTH[id] || VISEME_MOUTH[0];
+  const mouth = document.getElementById('mouth-overlay');
+  if (mouth) {
+    if (mouthShape.h > 0) {
+      mouth.style.height = mouthShape.h + 'px';
+      mouth.style.width = mouthShape.w + '%';
+      mouth.style.opacity = '1';
+    } else {
+      mouth.style.height = '0';
+      mouth.style.opacity = '0';
+    }
+  }
+
+  // --- Glow ring around avatar ---
+  let level;
+  if (openness < 0.03)        level = 0;
+  else if (openness < 0.18)   level = 1;
+  else if (openness < 0.35)   level = 2;
+  else if (openness < 0.55)   level = 3;
+  else                        level = 4;
+
+  const glowMap = [
+    '0 0 4px rgba(0,230,255,0.08)',
+    '0 0 12px rgba(0,230,255,0.2), 0 0 0 3px rgba(0,230,255,0.12)',
+    '0 0 22px rgba(0,230,255,0.4), 0 0 0 5px rgba(0,230,255,0.25)',
+    '0 0 35px rgba(0,230,255,0.6), 0 0 0 7px rgba(0,230,255,0.4)',
+    '0 0 50px rgba(0,230,255,0.9), 0 0 0 10px rgba(0,230,255,0.6), 0 0 80px rgba(0,230,255,0.3)',
+  ];
+  frame.style.boxShadow = glowMap[level];
+
+  const borderAlpha = [0.15, 0.3, 0.5, 0.75, 1.0][level];
+  frame.style.borderColor = `rgba(0, 230, 255, ${borderAlpha})`;
+}
+
+function startSpeakPulse() {
+  stopSpeakPulse();
+  const frame = document.getElementById('avatarFrame');
+  if (!frame) return;
+  frame.classList.remove('idle');
+  frame.classList.add('speaking');
+  // Fallback pulse when no viseme data
+  speakPhase = 0;
+  speakPulseTimer = setInterval(() => {
+    if (visemeQueue.length > 0) return; // viseme sequence is active, don't override
+    speakPhase = (speakPhase + 0.15) % (Math.PI * 2);
+    const s = Math.sin(speakPhase);
+    const intensity = Math.max(0, s * 1.5 + 0.3);
+    const spread = 3 + intensity * 5;
+    const glow = 15 + intensity * 30;
+    const alpha = 0.25 + intensity * 0.5;
+    frame.style.boxShadow = `0 0 ${glow}px rgba(0,230,255,${alpha}), 0 0 0 ${spread}px rgba(0,230,255,${alpha*0.6})`;
+  }, 40);
+}
+
+function stopSpeakPulse() {
+  if (speakPulseTimer) { clearInterval(speakPulseTimer); speakPulseTimer = null; }
+  const frame = document.getElementById('avatarFrame');
+  const mouth = document.getElementById('mouth-overlay');
+  if (mouth) { mouth.style.height = '0'; mouth.style.opacity = '0'; }
+  if (frame) {
+    frame.classList.remove('speaking');
+    frame.classList.add('idle');
+    frame.style.boxShadow = '';
+    frame.style.borderColor = '';
+  }
+}
+
+// --- Blink ---
+function doBlink() {
+  const overlay = document.getElementById('blink-overlay');
+  overlay.classList.add('active');
+  setTimeout(() => overlay.classList.remove('active'), 120);
+}
+
+function startIdleBlink() {
+  stopIdleBlink();
+  scheduleNextBlink();
+}
+
+function scheduleNextBlink() {
+  const delay = 2500 + Math.random() * 3000;
+  blinkTimer = setTimeout(() => {
+    doBlink();
+    scheduleNextBlink();
+  }, delay);
+}
+
+function stopIdleBlink() {
+  if (blinkTimer) { clearTimeout(blinkTimer); blinkTimer = null; }
+}
+
+function triggerBlinks(blinkTimestamps, startTime) {
+  if (!blinkTimestamps || !blinkTimestamps.length) return;
+  blinkTimestamps.forEach(bt => {
+    const delay = (bt * 1000) - (performance.now() - startTime);
+    if (delay > 0) {
+      setTimeout(() => doBlink(), delay);
+    }
+  });
+}
+
+// --- Viseme sequence playback (audio-synced) ---
+function playVisemeSequence(track, audioElement) {
+  if (!track || !track.frames) return;
+  console.log('[VISEME] playVisemeSequence start, frames:', track.frames.length);
+  stopViseme();
+
+  const startTime = performance.now();
+  visemeQueue = track.frames.slice();
+
+  // Schedule blinks from track
+  if (track.blinks && track.blinks.length) {
+    triggerBlinks(track.blinks, startTime);
+  }
+
+// Play each frame at its scheduled timestamp
+  const baseFps = track.fps || 30;
+  const frameMs = 1000 / baseFps;
+  let idx = 0;
+  let lastApplied = -1;
+  let frameCount = 0;
+
+  function tick() {
+    if (idx >= visemeQueue.length) {
+      console.log('[VISEME] tick END — processed', frameCount, 'frames total');
+      stopViseme();
+      return;
+    }
+    const elapsed = (performance.now() - startTime) / 1000;
+    // Apply all frames whose time has passed
+    while (idx < visemeQueue.length && visemeQueue[idx].t <= elapsed) {
+      if (idx !== lastApplied) {
+        applyViseme(visemeQueue[idx].v, visemeQueue[idx].o);
+        lastApplied = idx;
+        frameCount++;
+      }
+      idx++;
+    }
+    visemeTimer = setTimeout(tick, Math.max(8, frameMs));
+  }
+  tick();
+}
+
+function stopViseme() {
+  if (visemeTimer) { clearInterval(visemeTimer); visemeTimer = null; }
+  stopSpeakPulse();
+  startIdleBlink();
+}
+
+// --- Audio + Viseme combined playback ---
+function playAudioWithViseme(base64Audio, visemeTrack, blendshape, onDone) {
+  console.log('[VISEME] playAudioWithViseme called, visemeTrack:', visemeTrack, 'blendshape:', !!blendshape);
+  stopViseme();
+  canvasRenderer.stop();
+  stopIdleBlink();
+  stopSpeakPulse();
+
+  const audioSrc = 'data:audio/wav;base64,' + base64Audio;
+  const audio = new Audio(audioSrc);
+  currentAudio = audio;
+
+  const renderer = document.getElementById('rendererSelect').value;
+  const hasBlendshape = blendshape && blendshape.coeffs && blendshape.coeffs.length > 0;
+
+  function onAudioEnd() {
+    canvasRenderer.stop();
+    stopViseme();
+    stopSpeakPulse();
+    currentAudio = null;
+    if (renderer === 'canvas') {
+      // Canvas mode does its own blinking
+    } else {
+      startIdleBlink();
+    }
+    if (onDone) onDone();
+  }
+
+  if (renderer === 'liteavatar') {
+    audio.play();
+    _renderLiteAvatar(base64Audio);
+    audio.onended = onAudioEnd;
+  } else if (renderer === 'canvas' && hasBlendshape) {
+    audio.play();
+    canvasRenderer.play(blendshape, performance.now());
+    audio.onended = onAudioEnd;
+  } else {
+    startSpeakPulse();
+    function startViseme() {
+      if (visemeTrack && visemeTrack.frames && visemeTrack.frames.length > 0) {
+        console.log('[VISEME] starting viseme sequence, frames:', visemeTrack.frames.length, 'first:', visemeTrack.frames[0]);
+        playVisemeSequence(visemeTrack, audio);
+      } else {
+        console.log('[VISEME] no viseme frames to play');
+      }
+    }
+    if (audio.readyState >= 1) {
+      startViseme();
+    } else {
+      audio.onloadedmetadata = startViseme;
+    }
+    audio.play();
+    audio.onended = onAudioEnd;
+  }
+}
+
+// ============================================================================
+// LiteAvatar renderer
+// ============================================================================
+
+let _currentLiteAvatar = 'woman1';
+
+function fetchLiteAvatars() {
+  const sel = document.getElementById('liteavatarSelect');
+  fetch('/liteavatar/avatars')
+    .then(r => r.json())
+    .then(data => {
+      sel.innerHTML = '';
+      if (data.avatars && data.avatars.length) {
+        data.avatars.forEach(a => {
+          const opt = document.createElement('option');
+          opt.value = a.id;
+          opt.textContent = a.name;
+          sel.appendChild(opt);
+        });
+        _currentLiteAvatar = data.avatars[0].id;
+        sel.value = _currentLiteAvatar;
+        switchLiteAvatar(_currentLiteAvatar);
+      } else {
+        sel.innerHTML = '<option value="">無可用頭像</option>';
+      }
+    })
+    .catch(() => {
+      sel.innerHTML = '<option value="">載入失敗</option>';
+    });
+}
+
+function switchLiteAvatar(avatarId) {
+  _currentLiteAvatar = avatarId;
+  // Show preview image
+  const frame = document.getElementById('avatarFrame');
+  frame.style.backgroundImage = `url(/liteavatar/preview/${avatarId})`;
+  frame.style.backgroundSize = 'cover';
+  frame.style.backgroundPosition = 'center';
+}
+
+function _renderLiteAvatar(base64Audio) {
+  // Decode base64, send to /liteavatar/render, play result video
+  const video = document.getElementById('liteavatarVideo');
+  if (!video) return;
+
+  // Convert base64 WAV to blob
+  const binaryStr = atob(base64Audio);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+  const blob = new Blob([bytes], { type: 'audio/wav' });
+  const formData = new FormData();
+  formData.append('file', blob, 'audio.wav');
+  formData.append('avatar_id', _currentLiteAvatar);
+
+  fetch('/liteavatar/render', {
+    method: 'POST',
+    body: formData,
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.status === 'ok' && data.video_url) {
+      video.src = data.video_url;
+      video.style.opacity = '1';
+      video.play().catch(() => {});
+    }
+  })
+  .catch(e => console.error('[LiteAvatar] render error:', e));
+}
+
+function _onLiteAvatarVideoEnd() {
+  const video = document.getElementById('liteavatarVideo');
+  video.style.opacity = '0';
+  // Restore preview background
+  if (_currentLiteAvatar) {
+    document.getElementById('avatarFrame').style.backgroundImage = `url(/liteavatar/preview/${_currentLiteAvatar})`;
+  }
+}
+
+// ============================================================================
+// Audio: WebM → WAV converter
+// ============================================================================
+function audioBufferToWav(audioBuf) {
+  const numChannels = audioBuf.numberOfChannels;
+  const sampleRate = 16000;
+  const format = 1; // PCM
+  const bitsPerSample = 16;
+
+  // Mix down to mono and resample to 16kHz
+  const origLen = audioBuf.length;
+  const origRate = audioBuf.sampleRate;
+  const targetLen = Math.floor(origLen * sampleRate / origRate);
+  const ratio = origLen / targetLen;
+  const data = new Float32Array(targetLen);
+
+  // Downmix
+  for (let i = 0; i < targetLen; i++) {
+    const srcIdx = Math.floor(i * ratio);
+    let sum = 0;
+    for (let ch = 0; ch < numChannels; ch++) {
+      sum += audioBuf.getChannelData(ch)[srcIdx];
+    }
+    data[i] = Math.max(-1, Math.min(1, sum / numChannels));
+  }
+
+  const dataLen = targetLen * (bitsPerSample / 8);
+  const headerSize = 44;
+  const totalSize = headerSize + dataLen;
+  const buf = new ArrayBuffer(totalSize);
+  const dv = new DataView(buf);
+
+  function writeStr(offset, s) {
+    for (let i = 0; i < s.length; i++) dv.setUint8(offset + i, s.charCodeAt(i));
+  }
+  function write16(offset, v) { dv.setUint16(offset, v, true); }
+  function write32(offset, v) { dv.setUint32(offset, v, true); }
+
+  writeStr(0, 'RIFF');
+  write32(4, totalSize - 8);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  write32(16, 16);
+  write16(20, format);
+  write16(22, 1);           // mono
+  write32(24, sampleRate);
+  write32(28, sampleRate * (bitsPerSample / 8));
+  write16(32, bitsPerSample / 8);
+  write16(34, bitsPerSample);
+  writeStr(36, 'data');
+  write32(40, dataLen);
+
+  let offset = 44;
+  for (let i = 0; i < targetLen; i++) {
+    const s = Math.max(-32768, Math.min(32767, Math.round(data[i] * 32767)));
+    dv.setInt16(offset, s, true);
+    offset += 2;
+  }
+  return buf;
+}
+
+// ============================================================================
+// Model Switching
+// ============================================================================
+async function loadModelList() {
+  try {
+    const resp = await fetch('/models');
+    const data = await resp.json();
+    const sel = document.getElementById('modelSelect');
+    sel.innerHTML = '';
+    for (const [key, label] of Object.entries(data.available)) {
+      const opt = document.createElement('option');
+      opt.value = key; opt.textContent = label;
+      if (data.current && key.includes(data.current)) opt.selected = true;
+      sel.appendChild(opt);
+    }
+  } catch (e) { /* ignore */ }
+}
+
+document.getElementById('modelSelect').onchange = async function() {
+  const model = this.value;
+  addChatEntry('system', `切換模型至 ${model}...`);
+  try {
+    const resp = await fetch('/switch-model', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({model: model}),
+    });
+    const data = await resp.json();
+    if (data.error) { addChatEntry('error', data.error); return; }
+    addChatEntry('system', `模型已切換至 ${data.model}`);
+    // Reconnect WebSocket (pipeline was re-initialized)
+    setTimeout(connect, 500);
+  } catch (e) {
+    addChatEntry('error', '切換失敗：' + e.message);
+  }
+};
+
+// ============================================================================
+// Microphone Recording
+// ============================================================================
+let mediaRecorder = null;
+let audioChunks = [];
+let isRecording = false;
+
+document.getElementById('micBtn').onclick = async () => {
+  if (isRecording) {
+    mediaRecorder.stop();
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+    audioChunks = [];
+    isRecording = true;
+    document.getElementById('micBtn').classList.add('recording');
+    document.getElementById('micBtn').textContent = '🔴 停止';
+
+    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
+
+    mediaRecorder.onstop = async () => {
+      isRecording = false;
+      document.getElementById('micBtn').classList.remove('recording');
+      document.getElementById('micBtn').textContent = '🎤 錄音';
+      stream.getTracks().forEach(t => t.stop());
+
+      if (audioChunks.length === 0) return;
+      const blob = new Blob(audioChunks, { type: 'audio/webm' });
+
+      // Convert webm → WAV (16kHz mono 16-bit PCM)
+      try {
+        const buf = await blob.arrayBuffer();
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const audioBuf = await ctx.decodeAudioData(buf);
+        const wav = audioBufferToWav(audioBuf);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(wav);
+          setStatus('busy', '聆聽中');
+          addChatEntry('system', '🎤 語音已送出，等待辨識...');
+        }
+      } catch (e) {
+        addChatEntry('error', '音頻轉換失敗：' + e.message);
+      }
+    };
+
+    mediaRecorder.start();
+  } catch (e) {
+    addChatEntry('error', '麥克風權限被拒或無法使用：' + e.message);
+  }
+};
+
+// ============================================================================
+// Text Input
+// ============================================================================
+let _sending = false;
+document.getElementById('sendBtn').onclick = () => {
+  if (_sending) return;
+  const input = document.getElementById('textInput');
+  const text = input.value.trim();
+  if (!text) return;
+  _sending = true;
+  input.value = '';
+  addChatEntry('user', text);
+  sendText(text);
+  setTimeout(() => { _sending = false; }, 500);
+};
+
+document.getElementById('textInput').onkeydown = (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    document.getElementById('sendBtn').click();
+  }
+};
+
+// ============================================================================
+// Init
+// ============================================================================
+connect();
+
+// ============================================================================
+// Image Avatar mode
+// ============================================================================
+function switchImageAvatar(path) {
+  const frame = document.getElementById('avatarFrame');
+  const placeholder = document.getElementById('avatarPlaceholder');
+  const blinkEl = document.getElementById('blink-overlay');
+  stopViseme();
+  if (!path) {
+    frame.style.backgroundImage = '';
+    frame.style.backgroundSize = '';
+    placeholder.style.display = 'flex';
+    frame.style.borderRadius = '50%';
+    frame.style.width = '200px';
+    frame.style.height = '200px';
+    if (blinkEl) blinkEl.style.borderRadius = '50%';
+    localStorage.removeItem('jarvisAvatar');
+    return;
+  }
+  const isFullBody = path.includes('full-body');
+  const br = isFullBody ? '16px' : '50%';
+  frame.style.borderRadius = br;
+  frame.style.width = isFullBody ? '360px' : '220px';
+  frame.style.height = isFullBody ? '540px' : '220px';
+  frame.style.maxHeight = isFullBody ? '70vh' : '220px';
+  if (blinkEl) blinkEl.style.borderRadius = br;
+  frame.style.backgroundImage = 'url(' + path + ')';
+  frame.style.backgroundSize = 'cover';
+  frame.style.backgroundPosition = 'center';
+  placeholder.style.display = 'none';
+  localStorage.setItem('jarvisAvatar', path);
+}
+
+// Start idle blinks on page load
+startIdleBlink();
+
+const savedAvatar = localStorage.getItem('jarvisAvatar');
+if (savedAvatar) {
+  const sel = document.getElementById('imageAvatarSelect');
+  // Check if the saved path still exists as an option
+  let exists = false;
+  for (let i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === savedAvatar) { exists = true; break; }
+  }
+  if (exists) {
+    sel.value = savedAvatar;
+    switchImageAvatar(savedAvatar);
+  }
+}
+
+const savedRenderer = localStorage.getItem('jarvisRenderer');
+if (savedRenderer === 'canvas') {
+  document.getElementById('rendererSelect').value = 'canvas';
+  switchRenderer('canvas');
+} else if (savedRenderer === 'liteavatar') {
+  document.getElementById('rendererSelect').value = 'liteavatar';
+  switchRenderer('liteavatar');
+} else {
+  // Default: image mode — show selector + load default
+  document.getElementById('imageAvatarSelect').style.display = 'inline-block';
+  switchImageAvatar('/assets/img/face.jpeg');
+}
+</script>
+</body>
+</html>

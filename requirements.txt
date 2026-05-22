@@ -1,0 +1,67 @@
+# JARVIS Python Dependencies
+# 安裝: pip install -r requirements.txt
+
+# === Core ===
+fastapi
+uvicorn[standard]
+websockets
+httpx
+pydantic
+python-multipart
+python-dotenv
+
+# === ASR (Whisper) ===
+openai-whisper
+
+# === TTS ===
+kokoro>=0.9.4
+soundfile
+pypinyin>=0.55.0
+cn2an
+jieba
+
+# === A2BS (MNN) ===
+mnn
+
+# === LiteAvatar ===
+onnxruntime
+opencv-python
+torch
+torchaudio
+torchvision
+librosa
+pydub
+scipy
+typeguard==2.13.3
+modelscope
+loguru
+h5py
+sentencepiece
+jaconv
+hydra-core
+omegaconf
+einops
+rotary-embedding-torch
+tensorboardX
+addict
+humanfriendly
+coloredlogs
+oss2
+editdistance
+torch-complex
+
+# === AI / LLM ===
+transformers
+huggingface_hub
+sentencepiece
+accelerate
+
+# === WebSocket / Bot ===
+python-telegram-bot
+langchain
+langchain-community
+
+# === Audio ===
+silero-vad
+jiwer
+resampy
