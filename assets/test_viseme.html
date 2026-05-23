@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Viseme Test</title>
+<style>
+:root{--glow:#00d4ff;--glow-dim:rgba(0,180,255,0.3);--bg:#0a0e17;--panel:rgba(10,20,40,0.85);--text:#c0d0e0}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;padding:40px 20px;gap:24px}
+h1{color:var(--glow);font-size:18px;letter-spacing:2px;text-transform:uppercase}
+.avatar-frame{width:200px;height:200px;border-radius:50%;border:2px solid var(--glow-dim);overflow:hidden;position:relative;background:rgba(0,20,40,0.5);box-shadow:0 0 30px rgba(0,180,255,0.15)}
+#mouth-overlay{position:absolute;bottom:18%;left:50%;transform:translateX(-50%);width:28%;height:0;border-radius:50%;background:rgba(20,10,30,0.85);pointer-events:none;z-index:2;transition:height 0.03s,width 0.03s,opacity 0.03s}
+.controls{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.btn{background:transparent;border:1px solid var(--glow-dim);color:var(--glow);padding:8px 20px;border-radius:4px;cursor:pointer;font-size:13px;transition:all 0.2s}
+.btn:hover{background:rgba(0,180,255,0.1);border-color:var(--glow)}
+.btn.playing{background:rgba(255,51,85,0.2);border-color:#ff3355;color:#ff3355}
+.btn:disabled{opacity:0.4;cursor:not-allowed}
+.viseme-display{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;width:360px}
+.viseme-cell{padding:8px;text-align:center;border:1px solid var(--glow-dim);border-radius:4px;font-size:11px;transition:all 0.1s}
+.viseme-cell.active{border-color:var(--glow);background:rgba(0,180,255,0.15);box-shadow:0 0 10px rgba(0,180,255,0.2)}
+.viseme-cell .id{color:var(--glow);font-weight:bold;font-size:13px}
+.viseme-cell .name{color:var(--text);opacity:0.6}
+#status{font-size:12px;color:var(--glow-dim);letter-spacing:1px;min-height:20px}
+#openness-bar{width:360px;height:6px;background:rgba(0,180,255,0.1);border-radius:3px;overflow:hidden}
+#openness-fill{height:100%;width:0%;background:var(--glow);border-radius:3px;transition:width 0.05s}
+.info{font-size:11px;color:var(--glow-dim);opacity:0.5;max-width:400px;text-align:center;line-height:1.6}
+</style>
+</head>
+<body>
+
+<h1>◈ Viseme Test</h1>
+
+<div class="avatar-frame" id="avatarFrame">
+  <div id="mouth-overlay"></div>
+</div>
+
+<div id="openness-bar"><div id="openness-fill"></div></div>
+<div id="status">就緒</div>
+
+<div class="controls">
+  <button class="btn" id="btnPlay">▶ 播放測試序列</button>
+  <button class="btn" id="btnPulse">〰 脈波模式</button>
+  <button class="btn" id="btnStop" disabled>■ 停止</button>
+</div>
+
+<div class="viseme-display" id="visemeGrid"></div>
+<div class="info">viseme ID 與嘴型對照 — 亮藍色為當前播放</div>
+
+<script>
+const VISEME_NAMES = ['REST','A','B','C','D','E','F','G','I','O','U','W'];
+const VISEME_MOUTH = {
+  0:  { h: 0,  w: 0  }, 1:  { h: 52, w: 50 }, 2:  { h: 0,  w: 0  },
+  3:  { h: 16, w: 30 }, 4:  { h: 10, w: 24 }, 5:  { h: 6,  w: 22 },
+  6:  { h: 4,  w: 20 }, 7:  { h: 38, w: 42 }, 8:  { h: 24, w: 36 },
+  9:  { h: 30, w: 34 }, 10: { h: 12, w: 26 }, 11: { h: 14, w: 28 },
+};
+
+const mouth = document.getElementById('mouth-overlay');
+const frame = document.getElementById('avatarFrame');
+const status = document.getElementById('status');
+const fill = document.getElementById('openness-fill');
+const btnPlay = document.getElementById('btnPlay');
+const btnPulse = document.getElementById('btnPulse');
+const btnStop = document.getElementById('btnStop');
+
+let visemeTimer = null;
+let isPlaying = false;
+
+// Build viseme grid
+const grid = document.getElementById('visemeGrid');
+const cells = [];
+for (let id = 0; id < 12; id++) {
+  const cell = document.createElement('div');
+  cell.className = 'viseme-cell';
+  cell.innerHTML = `<div class="id">${id}</div><div class="name">${VISEME_NAMES[id]}</div>`;
+  grid.appendChild(cell);
+  cells.push(cell);
+}
+
+function applyViseme(id, openness) {
+  const shape = VISEME_MOUTH[id] || VISEME_MOUTH[0];
+  if (shape.h > 0) {
+    mouth.style.height = shape.h + 'px';
+    mouth.style.width = shape.w + '%';
+    mouth.style.opacity = '1';
+  } else {
+    mouth.style.height = '0';
+    mouth.style.opacity = '0';
+  }
+  const glow = 12 + openness * 38;
+  const alpha = 0.15 + openness * 0.7;
+  frame.style.boxShadow = `0 0 ${glow}px rgba(0,230,255,${alpha}), 0 0 0 ${2+openness*5}px rgba(0,230,255,${alpha*0.5})`;
+  frame.style.borderColor = `rgba(0,230,255,${0.15 + openness * 0.85})`;
+  fill.style.width = (openness * 100) + '%';
+  cells.forEach((c, i) => c.classList.toggle('active', i === id));
+  status.textContent = `Viseme ${id} — ${VISEME_NAMES[id]} (openness: ${openness.toFixed(2)})`;
+}
+
+function stopTest() {
+  if (visemeTimer) { clearTimeout(visemeTimer); visemeTimer = null; }
+  isPlaying = false;
+  btnPlay.textContent = '▶ 播放測試序列';
+  btnPulse.textContent = '〰 脈波模式';
+  btnStop.disabled = true;
+  btnPlay.disabled = false;
+  btnPulse.disabled = false;
+  applyViseme(0, 0);
+  status.textContent = '已停止';
+}
+
+// Test sequence: cycles through visemes with varying openness
+function playSequence() {
+  stopTest();
+  isPlaying = true;
+  btnPlay.textContent = '▶ 播放中...';
+  btnStop.disabled = false;
+
+  const frames = [];
+  // Build a natural-looking sequence
+  const pattern = [0,0,0, 1,7,1,0, 8,8,0, 5,5,0, 9,9,0, 3,3,0, 10,10,0, 11,11,0, 1,1,7,1,0,0,0];
+  pattern.forEach((id, i) => {
+    const openness = id === 0 ? 0 : [0.3, 0.6, 0.8][i % 3];
+    frames.push({ id, openness, t: i * 0.12 });
+  });
+
+  const startTime = performance.now();
+  let idx = 0;
+
+  function tick() {
+    if (!isPlaying) return;
+    const elapsed = (performance.now() - startTime) / 1000;
+    while (idx < frames.length && frames[idx].t <= elapsed) {
+      applyViseme(frames[idx].id, frames[idx].openness);
+      idx++;
+    }
+    if (idx >= frames.length) {
+      status.textContent = '✓ 序列播放完畢';
+      btnPlay.textContent = '▶ 播放測試序列';
+      btnStop.disabled = true;
+      isPlaying = false;
+      setTimeout(() => applyViseme(0, 0), 500);
+      return;
+    }
+    visemeTimer = setTimeout(tick, 30);
+  }
+  tick();
+}
+
+// Pulse mode: smooth oscillation
+function playPulse() {
+  stopTest();
+  isPlaying = true;
+  btnPulse.textContent = '〰 脈波中...';
+  btnStop.disabled = false;
+
+  let phase = 0;
+  let lastId = -1;
+
+  function tick() {
+    if (!isPlaying) return;
+    phase += 0.08;
+    const s = Math.sin(phase);
+    const openness = Math.max(0, s * 1.2 + 0.2);
+    const id = Math.round(Math.abs(Math.sin(phase * 0.5)) * 11);
+    if (id !== lastId) lastId = id;
+    applyViseme(id, Math.min(1, openness));
+    visemeTimer = setTimeout(tick, 30);
+  }
+  tick();
+}
+
+btnPlay.onclick = playSequence;
+btnPulse.onclick = playPulse;
+btnStop.onclick = stopTest;
+
+status.textContent = '就緒 — 點擊「播放測試序列」開始';
+</script>
+</body>
+</html>

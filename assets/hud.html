@@ -16,6 +16,9 @@
   --accent: #00d4ff;
   --danger: #ff3355;
   --success: #00ff88;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -53,7 +56,12 @@ body::before {
   text-shadow: 0 0 20px var(--glow-dim), 0 0 40px rgba(0,180,255,0.1);
   letter-spacing: 3px;
 }
-.status-group { display: flex; align-items: center; gap: 16px; font-size: 12px; }
+.status-group {
+  display: flex; align-items: center; gap: 10px; font-size: 12px;
+  flex-wrap: wrap;
+}
+.status-group .model-select { max-width: 140px; }
+.status-group .model-select#rendererSelect { max-width: 130px; }
 .status-dot {
   width: 8px; height: 8px; border-radius: 50%;
   background: var(--success);
@@ -84,6 +92,7 @@ body::before {
   background: rgba(0, 20, 40, 0.5);
   margin-bottom: 20px;
   flex-shrink: 0;
+  transition: width 0.4s ease, height 0.4s ease, border-radius 0.4s ease, max-height 0.4s ease;
 }
 .avatar-placeholder {
   font-size: 60px; color: var(--glow-dim);
@@ -147,8 +156,8 @@ body::before {
 
 /* Chat area */
 .chat-area {
-  flex: 0 0 auto; max-height: 200px; overflow-y: auto;
-  padding: 10px 24px;
+  flex: 0 0 auto; max-height: 180px; overflow-y: auto;
+  padding: 8px 20px;
   border-top: 1px solid var(--glow-dim);
   background: var(--panel);
 }
@@ -156,52 +165,83 @@ body::before {
 .chat-area::-webkit-scrollbar-track { background: transparent; }
 .chat-area::-webkit-scrollbar-thumb { background: var(--glow-dim); border-radius: 2px; }
 .msg {
-  display: flex; margin-bottom: 6px; font-size: 13px;
+  display: flex; margin-bottom: 4px; font-size: 12px;
   animation: fadeIn 0.3s ease;
   max-width: 100%;
+  line-height: 1.5;
 }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-.msg .who { min-width: 60px; flex-shrink: 0; font-weight: bold; }
+.msg .who {
+  min-width: 56px; flex-shrink: 0; font-weight: bold;
+  opacity: 0.85; letter-spacing: 1px;
+}
 .msg.user .who { color: var(--glow); }
 .msg.jarvis .who { color: var(--success); }
-.msg .body { color: var(--text); word-break: break-word; overflow-wrap: break-word; white-space: pre-wrap; }
+.msg.system .who { color: rgba(0, 230, 255, 0.5); }
+.msg .body {
+  color: var(--text); word-break: break-word; overflow-wrap: break-word; white-space: pre-wrap;
+  padding-left: 8px;
+  border-left: 1px solid rgba(0, 180, 255, 0.1);
+}
 .msg.error .who { color: var(--danger); }
 .msg.error .body { color: var(--danger); opacity: 0.8; }
 
 /* Input area */
 .input-area {
   display: flex; align-items: center; gap: 8px;
-  padding: 10px 24px;
+  padding: 10px 20px;
   border-top: 1px solid var(--glow-dim);
   background: var(--panel);
 }
 .input-area input {
   flex: 1; background: rgba(0, 20, 40, 0.6);
-  border: 1px solid var(--glow-dim); border-radius: 4px;
+  border: 1px solid var(--glow-dim); border-radius: var(--radius-sm);
   padding: 10px 14px; color: var(--text-bright);
   font-family: inherit; font-size: 14px; outline: none;
-  transition: border-color 0.3s;
+  transition: border-color 0.3s, box-shadow 0.3s;
 }
-.input-area input:focus { border-color: var(--glow); }
+.input-area input:focus {
+  border-color: var(--glow);
+  box-shadow: 0 0 12px rgba(0, 180, 255, 0.15);
+}
 .input-area input::placeholder { color: rgba(192, 208, 224, 0.3); }
 .btn {
   background: transparent; border: 1px solid var(--glow-dim);
-  color: var(--glow); padding: 10px 16px; border-radius: 4px;
+  color: var(--glow); padding: 10px 16px; border-radius: var(--radius-sm);
   cursor: pointer; font-family: inherit; font-size: 13px;
   transition: all 0.2s; white-space: nowrap;
+  position: relative;
+  overflow: hidden;
 }
-.btn:hover { background: rgba(0, 180, 255, 0.1); border-color: var(--glow); }
+.btn:hover { background: rgba(0, 180, 255, 0.1); border-color: var(--glow); box-shadow: 0 0 10px rgba(0, 180, 255, 0.1); }
 .btn:active { transform: scale(0.96); }
 .btn.recording { background: rgba(255, 51, 85, 0.2); border-color: var(--danger); color: var(--danger); animation: recPulse 1s infinite; }
 @keyframes recPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
-.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn:disabled { opacity: 0.35; cursor: not-allowed; filter: grayscale(0.5); }
 .model-select {
   background: rgba(0,20,40,0.6); border: 1px solid var(--glow-dim);
   color: var(--glow); font-family: inherit; font-size: 12px;
-  padding: 4px 8px; border-radius: 4px; cursor: pointer; outline: none;
+  padding: 5px 8px; border-radius: var(--radius-sm); cursor: pointer; outline: none;
+  transition: border-color 0.2s;
 }
+.model-select:hover { border-color: var(--glow); }
+.model-select:focus { border-color: var(--glow); box-shadow: 0 0 8px rgba(0, 180, 255, 0.15); }
 .model-select option { background: #0a0e17; color: var(--text); }
 #faceCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 3; }
+
+/* Scanline overlay */
+.hud::after {
+  content: '';
+  position: fixed; inset: 0; z-index: 9999;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+}
 
 /* Connection status */
 .connecting-overlay {
@@ -209,8 +249,15 @@ body::before {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   background: var(--bg);
   gap: 20px;
+  opacity: 1;
+  transition: opacity 0.5s ease, visibility 0.5s ease;
+  visibility: visible;
 }
-.connecting-overlay.hidden { display: none; }
+.connecting-overlay.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
 .connecting-overlay .spinner {
   width: 40px; height: 40px;
   border: 2px solid var(--glow-dim);
@@ -223,12 +270,26 @@ body::before {
 .connecting-overlay .retry-btn { margin-top: 10px; }
 
 /* Responsive */
-@media (max-width: 600px) {
+@media (max-width: 700px) {
+  .top-bar { padding: 8px 12px; gap: 6px; }
+  .logo { font-size: 16px; letter-spacing: 2px; }
+  .status-group { gap: 6px; font-size: 11px; }
+  .status-group .model-select { font-size: 11px; padding: 3px 6px; max-width: 110px; }
   .avatar-frame { width: 140px; height: 140px; }
   .avatar-placeholder { font-size: 40px; }
-  .speech-bubble { font-size: 13px; }
-  .top-bar { padding: 8px 12px; flex-wrap: wrap; gap: 8px; }
-  .logo { font-size: 16px; }
+  .speech-bubble { font-size: 13px; max-width: 90%; }
+  .input-area { padding: 8px 12px; }
+  .input-area input { font-size: 13px; padding: 8px 10px; }
+  .btn { padding: 8px 12px; font-size: 12px; }
+  .chat-area { padding: 6px 12px; max-height: 140px; }
+  .chat-area .msg { font-size: 11px; }
+}
+@media (max-width: 400px) {
+  .top-bar .status-group .model-select:not(#rendererSelect) { display: none; }
+  .avatar-frame { width: 110px; height: 110px; }
+  .input-area { flex-wrap: wrap; }
+  .input-area input { min-width: 100%; order: -1; }
+  .btn { flex: 1; text-align: center; }
 }
 </style>
 </head>
@@ -249,7 +310,7 @@ body::before {
         <option value="image">Image Avatar</option>
         <option value="canvas">Canvas 2D</option>
         <option value="liteavatar">LiteAvatar 2D</option>
-        <option value="vrm" disabled>3D VRM</option>
+        <option value="vrm">3D VRM</option>
       </select>
       <select id="imageAvatarSelect" class="model-select" style="display:none" onchange="switchImageAvatar(this.value)">
         <option value="/assets/img/face.jpeg">大頭照</option>
@@ -261,6 +322,7 @@ body::before {
       <span class="status-dot" id="statusDot"></span>
       <span class="status-label" id="statusLabel">待命</span>
       <span style="color:var(--glow-dim);font-size:11px" id="pingDisplay">-- ms</span>
+      <span class="dh-badge" id="dhBadge" style="display:none;font-size:10px;padding:2px 6px;border:1px solid var(--glow-dim);border-radius:3px;color:var(--glow)">DH:BODY</span>
     </div>
   </div>
 
@@ -285,6 +347,14 @@ body::before {
   </div>
 </div>
 
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
 <script>
 // ============================================================================
 // WebSocket
@@ -302,10 +372,24 @@ function connect() {
 
   ws = new WebSocket(WS_URL);
 
-  ws.onopen = () => {
+  let dismissed = false;
+  function dismissOverlay() {
+    if (dismissed) return;
+    dismissed = true;
     document.getElementById('connOverlay').classList.add('hidden');
+  }
+
+  let connectTimeout = setTimeout(() => {
+    dismissOverlay();
+    addChatEntry('system', '⚠ 無法連線到 JARVIS 伺服器（已進入離線模式）');
+    document.getElementById('retryBtn').style.display = 'block';
+  }, 5000);
+
+  ws.onopen = () => {
+    clearTimeout(connectTimeout);
+    dismissOverlay();
     setStatus('ready', '待命');
-    addChatEntry('system', '已連線到 JARVIS');
+    addChatEntry('system', '✓ 已連線到 JARVIS');
     document.getElementById('textInput').disabled = false;
     document.getElementById('sendBtn').disabled = false;
     document.getElementById('micBtn').disabled = false;
@@ -313,18 +397,16 @@ function connect() {
   };
 
   ws.onclose = () => {
+    clearTimeout(connectTimeout);
+    dismissOverlay();
     setStatus('error', '離線');
-    document.getElementById('connOverlay').classList.remove('hidden');
-    document.getElementById('connText').textContent = '連線中斷，正在重試...';
     document.getElementById('retryBtn').style.display = 'block';
     document.getElementById('textInput').disabled = true;
     document.getElementById('sendBtn').disabled = true;
     document.getElementById('micBtn').disabled = true;
-    if (reconnectTimer) clearTimeout(reconnectTimer);
-    reconnectTimer = setTimeout(connect, 3000);
   };
 
-  ws.onerror = () => {};
+  ws.onerror = () => { clearTimeout(connectTimeout); dismissOverlay(); };
 
   ws.onmessage = (e) => {
     let data;
@@ -341,6 +423,14 @@ function connect() {
 
     if (data.transcription) {
       addChatEntry('user', data.transcription);
+    }
+
+    if (data.command) {
+      const renderer = document.getElementById('rendererSelect').value;
+      if (renderer === 'vrm' && window.__vrmRenderer) {
+        window.__vrmRenderer.setAction(data.command);
+      }
+      setStatus('ready', `動作: ${data.command}`);
     }
 
     if (data.response) {
@@ -475,11 +565,21 @@ class CanvasFaceRenderer {
   }
 
   _startIdleLoop() {
+    if (this._idleTimer) return;
+    this._frameCount = 0;
     const loop = () => {
+      this._frameCount++;
       this._tick();
       this._idleTimer = requestAnimationFrame(loop);
     };
     this._idleTimer = requestAnimationFrame(loop);
+  }
+
+  _stopIdleLoop() {
+    if (this._idleTimer) {
+      cancelAnimationFrame(this._idleTimer);
+      this._idleTimer = null;
+    }
   }
 
   _drawIdle() {
@@ -646,6 +746,7 @@ class CanvasFaceRenderer {
   }
 
   _tick() {
+    if (!this._playing && this._frameCount % 4 !== 0) return;
     if (this._playing && this.queue.length > 0) {
       const elapsed = performance.now() - this.startTime;
       const frameMs = 1000 / this.fps;
@@ -686,6 +787,16 @@ class CanvasFaceRenderer {
     this._gazeY += (Math.random() - 0.5) * 0.02;
     this._gazeX *= 0.98;
     this._gazeY *= 0.98;
+  }
+
+  dispose() {
+    this._stopIdleLoop();
+    this._playing = false;
+    this.queue = [];
+    if (this._ro) {
+      this._ro.disconnect();
+      this._ro = null;
+    }
   }
 
   _lerp(a, b, t) {
@@ -852,6 +963,10 @@ class CanvasFaceRenderer {
         ctx.beginPath();
         ctx.arc(ex + gazeOffX + 0.5 * scale, eyeY + 0.5 * scale + gazeOffY, (2 - blinkValue) * scale, 0, Math.PI * 2);
         ctx.fillStyle = '#1a2a45';
+      }
+
+    }
+
     if (furrow > 0.5) {
       ctx.beginPath();
       ctx.moveTo(cx - 3 * scale, eyeY - 20 * scale);
@@ -1025,6 +1140,7 @@ function switchRenderer(mode) {
 
   // Stop all renderers first
   canvasRenderer.stop();
+  canvasRenderer._stopIdleLoop();
   video.pause();
   video.src = '';
   video.style.display = 'none';
@@ -1039,6 +1155,7 @@ function switchRenderer(mode) {
     blinkEl.style.display = 'none';
     mouthEl.style.display = 'none';
     stopIdleBlink();
+    canvasRenderer._startIdleLoop();
     frame.style.borderRadius = '50%';
     frame.style.width = '200px';
     frame.style.height = '200px';
@@ -1071,6 +1188,26 @@ function switchRenderer(mode) {
     video.onplaying = () => { video.style.opacity = '1'; };
     video.onended = () => { video.style.opacity = '0'; };
     video.style.opacity = '0';
+
+  } else if (mode === 'vrm') {
+    placeholder.style.display = 'none';
+    blinkEl.style.display = 'none';
+    mouthEl.style.display = 'none';
+    stopIdleBlink();
+    canvas.style.display = 'none';
+    frame.style.borderRadius = '16px';
+    frame.style.width = '360px';
+    frame.style.height = '540px';
+    frame.style.maxHeight = '70vh';
+    frame.style.backgroundImage = '';
+    document.getElementById('liteavatarSelect').style.display = 'none';
+    document.getElementById('imageAvatarSelect').style.display = 'none';
+    localStorage.setItem('jarvisRenderer', 'vrm');
+    if (!window.__vrmRenderer) {
+      createVrmRenderer(frame).catch(console.error);
+    } else {
+      window.__vrmRenderer.setAction('idle');
+    }
 
   } else {
     // image mode (default)
@@ -1308,6 +1445,13 @@ function playAudioWithViseme(base64Audio, visemeTrack, blendshape, onDone) {
     audio.play();
     canvasRenderer.play(blendshape, performance.now());
     audio.onended = onAudioEnd;
+  } else if (renderer === 'vrm' && window.__vrmRenderer) {
+    window.__vrmRenderer.setAction('talking');
+    audio.play();
+    audio.onended = () => {
+      window.__vrmRenderer.setAction('idle');
+      onAudioEnd();
+    };
   } else {
     startSpeakPulse();
     function startViseme() {
@@ -1585,7 +1729,11 @@ document.getElementById('textInput').onkeydown = (e) => {
 // ============================================================================
 // Init
 // ============================================================================
-connect();
+// Init: try WebSocket, fallback to offline after timeout
+document.addEventListener('DOMContentLoaded', () => {
+  connect();
+  loadModelList();
+});
 
 // ============================================================================
 // Image Avatar mode
@@ -1637,18 +1785,180 @@ if (savedAvatar) {
   }
 }
 
-const savedRenderer = localStorage.getItem('jarvisRenderer');
-if (savedRenderer === 'canvas') {
-  document.getElementById('rendererSelect').value = 'canvas';
-  switchRenderer('canvas');
-} else if (savedRenderer === 'liteavatar') {
-  document.getElementById('rendererSelect').value = 'liteavatar';
-  switchRenderer('liteavatar');
-} else {
-  // Default: image mode — show selector + load default
-  document.getElementById('imageAvatarSelect').style.display = 'inline-block';
-  switchImageAvatar('/assets/img/face.jpeg');
+document.addEventListener('DOMContentLoaded', () => {
+  if (typeof createVrmRenderer !== 'function') {
+    // Module script not yet loaded; retry after module evaluates
+    setTimeout(() => initRenderer(), 100);
+  } else {
+    initRenderer();
+  }
+});
+
+function initRenderer() {
+  const savedRenderer = localStorage.getItem('jarvisRenderer');
+  if (savedRenderer === 'canvas') {
+    document.getElementById('rendererSelect').value = 'canvas';
+    switchRenderer('canvas');
+  } else if (savedRenderer === 'liteavatar') {
+    document.getElementById('rendererSelect').value = 'liteavatar';
+    switchRenderer('liteavatar');
+  } else if (savedRenderer === 'vrm') {
+    document.getElementById('rendererSelect').value = 'vrm';
+    switchRenderer('vrm');
+  } else {
+    document.getElementById('imageAvatarSelect').style.display = 'inline-block';
+    switchImageAvatar('/assets/img/face.jpeg');
+  }
 }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const ACTION_ANIMS = {
+  idle:     'Human Armature|Idle',
+  walk:     'Human Armature|Walk',
+  lie_down: 'Human Armature|Death',
+  prone:    'Human Armature|Death',
+  talking:  '_talking',
+};
+
+function createTalkingClip(model) {
+  const headNames = ['Head', 'Neck', 'Spine1'];
+  const bones = [];
+  model.traverse(c => { if (c.isBone && headNames.includes(c.name)) bones.push(c); });
+  if (!bones.length) return null;
+
+  const dur = 2, fps = 24, frames = dur * fps;
+  const times = [];
+  for (let f = 0; f <= frames; f++) times.push(f / fps);
+
+  const tracks = [];
+  for (const bone of bones) {
+    const values = [];
+    for (let f = 0; f <= frames; f++) {
+      const t = f / fps, phase = t * 5 * Math.PI * 2;
+      let rx = 0, ry = 0, rz = 0;
+      if (bone.name === 'Head') {
+        rx = Math.sin(phase) * 0.04; ry = Math.sin(phase * 1.3) * 0.03; rz = Math.cos(phase * 0.7) * 0.02;
+      } else if (bone.name === 'Neck') {
+        rx = Math.sin(phase * 0.8) * 0.02; ry = Math.sin(phase * 1.1) * 0.015;
+      } else if (bone.name === 'Spine1') {
+        ry = Math.sin(phase * 0.6) * 0.015;
+      }
+      const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz));
+      values.push(q.x, q.y, q.z, q.w);
+    }
+    tracks.push(new THREE.QuaternionKeyframeTrack(bone.name + '.quaternion', times, values));
+  }
+  return new THREE.AnimationClip('_talking', dur, tracks);
+}
+
+window.createVrmRenderer = async function(container) {
+  const existing = window.__vrmRenderer;
+  if (existing) { existing.dispose(); window.__vrmRenderer = null; }
+
+  const w = container.clientWidth || 360;
+  const h = container.clientHeight || 540;
+
+  const scene = new THREE.Scene();
+  scene.background = null;
+
+  const camera = new THREE.PerspectiveCamera(30, w / h, 0.1, 100);
+  camera.position.set(0, 1.2, 4);
+  camera.lookAt(0, 0.8, 0);
+
+  const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+  renderer.setSize(w, h);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setClearColor(0x000000, 0);
+  renderer.domElement.style.width = '100%';
+  renderer.domElement.style.height = '100%';
+  container.appendChild(renderer.domElement);
+
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+  scene.add(ambientLight);
+  const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+  dirLight.position.set(2, 4, 3);
+  scene.add(dirLight);
+  const rimLight = new THREE.DirectionalLight(0x4488ff, 0.5);
+  rimLight.position.set(-2, 1, -3);
+  scene.add(rimLight);
+
+  let model, mixer, clock = new THREE.Clock();
+  const animClips = {};
+  let currentAction = null;
+
+  function fadeToAction(name, duration = 0.3) {
+    if (!mixer || !model) return;
+    if (currentAction && currentAction.name === name) return;
+    const clip = animClips[name];
+    if (!clip) { console.warn('[VRM] anim not found:', name); return; }
+    mixer.stopAllAction();
+    const next = mixer.clipAction(clip);
+    next.reset().fadeIn(duration).play();
+    currentAction = next;
+  }
+
+  const loader = new GLTFLoader();
+  try {
+    const gltf = await loader.loadAsync('/assets/models/jarvis_girl.glb');
+    model = gltf.scene;
+    scene.add(model);
+
+    const box = new THREE.Box3().setFromObject(model);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const dist = maxDim * 2.5;
+    camera.position.set(dist * 0.5, dist * 0.3 + center.y, dist);
+    camera.lookAt(center.x, center.y, center.z);
+
+    mixer = new THREE.AnimationMixer(model);
+    gltf.animations.forEach(clip => { animClips[clip.name] = clip; });
+    const tClip = createTalkingClip(model);
+    if (tClip) animClips._talking = tClip;
+    console.log('[VRM] anims:', Object.keys(animClips));
+
+    const idleClip = animClips['Human Armature|Idle'];
+    if (idleClip) {
+      currentAction = mixer.clipAction(idleClip);
+      currentAction.play();
+    }
+  } catch (err) {
+    console.error('[VRM] load error:', err);
+  }
+
+  renderer.setAnimationLoop(() => {
+    if (mixer) mixer.update(clock.getDelta());
+    renderer.render(scene, camera);
+  });
+
+  const resizeObserver = new ResizeObserver(() => {
+    const w2 = container.clientWidth || 360;
+    const h2 = container.clientHeight || 540;
+    camera.aspect = w2 / h2;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w2, h2);
+  });
+  resizeObserver.observe(container);
+
+  const vrm = {
+    dispose() {
+      renderer.setAnimationLoop(null);
+      resizeObserver.disconnect();
+      if (renderer.domElement.parentNode) renderer.domElement.parentNode.removeChild(renderer.domElement);
+      renderer.dispose();
+    },
+    setAction(name) {
+      const animName = ACTION_ANIMS[name] || 'Human Armature|Idle';
+      fadeToAction(animName, 0.4);
+    },
+    getAnimNames() { return Object.keys(animClips); },
+  };
+  window.__vrmRenderer = vrm;
+  return vrm;
+};
 </script>
 </body>
 </html>

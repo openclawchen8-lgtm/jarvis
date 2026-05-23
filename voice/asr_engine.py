@@ -26,14 +26,16 @@ from typing import Optional
 # 設定
 # ============================================================================
 
+_PROJ_ROOT = Path(__file__).resolve().parent.parent
+
 WHISPER_CLI = os.environ.get(
     "WHISPER_CLI",
-    "/Users/claw/Projects/JARVIS-on-mac/dev/whisper.cpp/build/bin/whisper-cli"
+    str(_PROJ_ROOT / "dev/whisper.cpp/build/bin/whisper-cli")
 )
 
 DEFAULT_MODEL = os.environ.get(
     "WHISPER_MODEL",
-    "/Users/claw/Projects/JARVIS-on-mac/dev/whisper.cpp/models/ggml-small.bin"
+    str(_PROJ_ROOT / "dev/whisper.cpp/models/ggml-small.bin")
 )
 
 SAMPLE_RATE = 16000
@@ -209,7 +211,7 @@ class WhisperASR:
             包含耗時和結果的 dict
         """
         if audio_path is None:
-            audio_path = "/Users/claw/Projects/JARVIS-on-mac/whisper.cpp/samples/jfk.wav"
+            audio_path = str(_PROJ_ROOT / "whisper.cpp/samples/jfk.wav")
 
         if not os.path.exists(audio_path):
             return {"error": f"Test audio not found: {audio_path}"}

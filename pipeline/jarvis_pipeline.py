@@ -71,6 +71,10 @@ class PipelineConfig:
     # A2BS (Audio-to-BlendShape) 設定
     a2bs_enabled: bool = True    # True = 啟用 UniTalker A2BS
 
+    # Digital Human (T043) 設定
+    dh_mode: str = "none"        # "none" / "body" / "face" / "hybrid"
+    dh_auto_command: bool = True # LLM 自動判斷動作指令
+
 
 # ============================================================================
 # Pipeline
@@ -98,6 +102,7 @@ class JarvisPipeline:
         self._asr = None
         self._tts = None
         self._a2bs = None
+        self._dh = None
         self._initialized = False
 
     # ------------------------------------------------------------------------
@@ -125,6 +130,9 @@ class JarvisPipeline:
         # A2BS
         if self.config.a2bs_enabled:
             self._a2bs = self._init_a2bs()
+
+        # Digital Human (T043)
+        self._dh = self._init_dh()
 
         self._initialized = True
         logger.info("Pipeline 初始化完成 ✅")
@@ -157,6 +165,37 @@ class JarvisPipeline:
             self.config.tts_enabled = False
             return None
 
+    def _init_dh(self):
+        """初始化 Digital Human 控制器。"""
+        if self.config.dh_mode in ("", "none"):
+            return None
+        try:
+            from digital_human import DHConfig, DigitalHumanMode, DigitalHumanController
+            mode = {
+                "body": DigitalHumanMode.BODY,
+                "face": DigitalHumanMode.FACE,
+                "hybrid": DigitalHumanMode.HYBRID,
+            }.get(self.config.dh_mode, DigitalHumanMode.NONE)
+            dconfig = DHConfig(
+                mode=mode,
+                tts_enabled=self.config.tts_enabled,
+                viseme_enabled=True,
+                a2bs_enabled=self.config.a2bs_enabled,
+                auto_command=self.config.dh_auto_command,
+            )
+            ctrl = DigitalHumanController(dconfig)
+            loop = asyncio.get_event_loop()
+            ok = loop.run_until_complete(ctrl.initialize())
+            if ok:
+                logger.info(f"DH 控制器初始化完成 ✅ (mode={self.config.dh_mode})")
+                return ctrl
+            else:
+                logger.warning(f"DH 控制器初始化失敗 (mode={self.config.dh_mode})")
+                return None
+        except Exception as e:
+            logger.warning(f"DH 控制器初始化異常: {e}")
+            return None
+
     def _init_a2bs(self):
         """初始化 A2BS (UniTalker-MNN)。若失敗則優雅降級。"""
         try:
@@ -182,6 +221,8 @@ class JarvisPipeline:
             )
         if self._a2bs is not None:
             self._a2bs.close()
+        if self._dh is not None:
+            self._dh.close()
         self._initialized = False
         logger.info("Pipeline 已關閉")
 
@@ -208,16 +249,25 @@ class JarvisPipeline:
                 None, self._brain.chat, text, 256, self.config.system_prompt
             )
             command, response = _parse_command(response)
+            dh_command = None
             audio = viseme_track = blendshape = None
             if self.config.voice_output and self._tts is not None:
                 audio, viseme_track, blendshape = await self._tts_step(response)
+                # DH controller may override command
+                if self._dh and self._dh.is_loaded:
+                    from digital_human import DigitalHumanMode
+                    if self._dh.config.mode == DigitalHumanMode.BODY:
+                        cmd_from_dh = self._dh._parse_command(response)
+                        if cmd_from_dh:
+                            dh_command = cmd_from_dh
+            final_command = dh_command or command
             return PipelineResult(
                 transcription=text,
                 response=response,
                 audio=audio,
                 viseme_track=viseme_track,
                 blendshape=blendshape,
-                command=command,
+                command=final_command,
                 error=None,
             )
         except Exception as e:
@@ -284,8 +334,16 @@ class JarvisPipeline:
 
         # Step 3: TTS（回應→語音 + viseme track + blendshape）
         audio = viseme_track = blendshape = None
+        dh_command = None
         if self.config.voice_output and self._tts is not None:
             audio, viseme_track, blendshape = await self._tts_step(response_text)
+            if self._dh and self._dh.is_loaded:
+                from digital_human import DigitalHumanMode
+                if self._dh.config.mode == DigitalHumanMode.BODY:
+                    cmd = self._dh._parse_command(response_text)
+                    if cmd:
+                        dh_command = cmd
+        final_command = dh_command or command
 
         return PipelineResult(
             transcription=transcription,
@@ -293,13 +351,15 @@ class JarvisPipeline:
             audio=audio,
             viseme_track=viseme_track,
             blendshape=blendshape,
-            command=command,
+            command=final_command,
             error=None,
         )
 
     async def _tts_step(self, text: str) -> Tuple[Optional[bytes], Optional[dict], Optional[dict]]:
         """
         TTS 步驟：文字 → (WAV bytes, viseme_track dict, blendshape dict)。
+
+        若 DH 模式啟用，路由至 DigitalHumanController 處理。
         失敗不回拋，回 (None, None, None)。
         """
         try:
@@ -307,11 +367,37 @@ class JarvisPipeline:
             audio_arr, sr = await loop.run_in_executor(
                 None, self._tts.speak_to_array, text
             )
+
+            # DH 模式：透過控制器統一處理
+            if self._dh is not None and self._dh.is_loaded:
+                dh_result = await loop.run_in_executor(
+                    None, self._dh.process_tts_result, audio_arr, sr, text
+                )
+                audio_b64 = dh_result.get("audio")
+                viseme_track = dh_result.get("viseme_track")
+                blendshape = dh_result.get("blendshape")
+
+                import base64
+                audio_bytes = base64.b64decode(audio_b64) if audio_b64 else None
+
+                if viseme_track:
+                    frames = viseme_track.get("frames", [])
+                    logger.info(f"DH VISEME: {len(frames)} frames")
+                if blendshape:
+                    logger.info(f"DH A2BS: {blendshape['num_frames']} frames @ {blendshape['fps']}fps")
+
+                # Merge command into pipeline result
+                cmd = dh_result.get("command")
+                if cmd:
+                    logger.info(f"DH command: {cmd}")
+
+                return audio_bytes, viseme_track, blendshape
+
+            # 非 DH 模式：原有邏輯
             import io
             import wave
             import numpy as np
 
-            # Generate viseme track from raw audio
             viseme_track = None
             try:
                 from render.render_engine import get_engine
@@ -325,7 +411,6 @@ class JarvisPipeline:
             except Exception as ve:
                 logger.warning(f"Viseme generation failed (non-fatal): {ve}")
 
-            # A2BS: ML-based blendshape from audio
             blendshape = None
             if self.config.a2bs_enabled and self._a2bs is not None:
                 try:
@@ -339,7 +424,6 @@ class JarvisPipeline:
                             "num_frames": result["num_frames"],
                             "coeffs": result["coeffs"],
                         }
-                        # Replace energy-based viseme with A2BS ML-based viseme
                         bs_track = _blendshape_to_viseme(result, duration=len(audio_arr)/sr)
                         if bs_track:
                             viseme_track = bs_track
@@ -388,12 +472,17 @@ class JarvisPipeline:
 
     def health_check(self) -> dict:
         """健康檢查。"""
+        dh_status = None
+        if self._dh is not None:
+            dh_status = self._dh.health()
         return {
             "initialized": self._initialized,
             "brain_loaded": self._brain is not None,
             "asr_loaded": self._asr is not None,
             "tts_loaded": self._tts is not None,
             "a2bs_loaded": self._a2bs is not None,
+            "dh_mode": self.config.dh_mode,
+            "dh_loaded": self._dh is not None and self._dh.is_loaded,
             "voice_output": self.config.voice_output,
         }
 

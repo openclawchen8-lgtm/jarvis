@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JARVIS HUD Lite</title>
+<style>
+:root{--glow:#00d4ff;--bg:#0a0e17;--panel:rgba(10,20,40,0.85);--text:#c0d0e0}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;display:flex;justify-content:center;padding-top:40px}
+.hud{width:400px}
+.avatar-frame{width:360px;height:540px;margin:0 auto;border-radius:16px;border:1px solid rgba(0,230,255,0.3);overflow:hidden;position:relative;background:#0d1520}
+select,button{margin-top:8px;background:rgba(0,230,255,0.1);border:1px solid rgba(0,230,255,0.3);color:#00e6ff;padding:6px 14px;border-radius:6px;font-size:13px}
+select{width:100%}
+.status{text-align:center;margin-top:8px;font-size:12px;color:rgba(0,230,255,0.6)}
+</style>
+</head>
+<body>
+<div class="hud">
+  <div class="avatar-frame" id="avatarFrame">
+    <div id="vrmContainer" style="width:100%;height:100%"></div>
+  </div>
+  <select id="rendererSelect">
+    <option value="image">Image 2D</option>
+    <option value="canvas">Canvas 2D</option>
+    <option value="liteavatar">LiteAvatar 2D</option>
+    <option value="vrm">3D VRM</option>
+  </select>
+  <div class="status" id="status">就緒</div>
+  <div id="log" style="margin-top:8px;font-size:11px;color:rgba(0,230,255,0.4);max-height:120px;overflow-y:auto"></div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const log = document.getElementById('log');
+const status = document.getElementById('status');
+const frame = document.getElementById('avatarFrame');
+const container = document.getElementById('vrmContainer');
+const sel = document.getElementById('rendererSelect');
+
+let vrmInstance = null;
+
+function logMsg(s) {
+  log.textContent += '[' + new Date().toLocaleTimeString() + '] ' + s + '\n';
+  console.log(s);
+}
+
+function clearVRM() {
+  if (vrmInstance) {
+    vrmInstance.dispose();
+    vrmInstance = null;
+  }
+}
+
+async function initVRM() {
+  clearVRM();
+  status.textContent = '載入 Three.js...';
+  logMsg('Starting VRM init');
+
+  const w = container.clientWidth || 360;
+  const h = container.clientHeight || 540;
+
+  const scene = new THREE.Scene();
+  scene.background = null;
+
+  const camera = new THREE.PerspectiveCamera(35, w/h, 0.1, 100);
+  camera.position.set(1.5, 1.2, 3);
+
+  const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+  renderer.setSize(w, h);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setClearColor(0x000000, 0);
+  renderer.domElement.style.width = '100%';
+  renderer.domElement.style.height = '100%';
+  container.innerHTML = '';
+  container.appendChild(renderer.domElement);
+
+  status.textContent = '建立場景...';
+  logMsg('Scene created');
+
+  new THREE.AmbientLight(0xffffff, 0.6, scene.add);
+  const dl = new THREE.DirectionalLight(0xffffff, 1.2);
+  dl.position.set(2,4,3);
+  scene.add(dl);
+  const rl = new THREE.DirectionalLight(0x4488ff, 0.5);
+  rl.position.set(-2,1,-3);
+  scene.add(rl);
+
+  let mixer, clock = new THREE.Clock();
+  const animClips = {};
+  let currentAction = null;
+
+  status.textContent = '載入 GLB 模型...';
+  logMsg('Loading GLB');
+
+  const loader = new GLTFLoader();
+  try {
+    const gltf = await loader.loadAsync('/assets/models/jarvis_girl.glb');
+    const model = gltf.scene;
+    scene.add(model);
+
+    const box = new THREE.Box3().setFromObject(model);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const dist = Math.max(size.x,size.y,size.z) * 2.5;
+    camera.position.set(dist*0.5, dist*0.3+center.y, dist);
+    camera.lookAt(center.x, center.y, center.z);
+
+    mixer = new THREE.AnimationMixer(model);
+    gltf.animations.forEach(c => { animClips[c.name] = c; });
+    logMsg('Anims: ' + Object.keys(animClips).join(', '));
+
+    if (animClips['Human Armature|Idle']) {
+      currentAction = mixer.clipAction(animClips['Human Armature|Idle']);
+      currentAction.play();
+    }
+    status.textContent = '✓ VRM 已載入';
+  } catch(e) {
+    status.textContent = '❌ ' + e.message;
+    logMsg('ERROR: ' + e.message);
+  }
+
+  renderer.setAnimationLoop(() => {
+    if (mixer) mixer.update(clock.getDelta());
+    renderer.render(scene, camera);
+  });
+
+  vrmInstance = {
+    dispose() {
+      renderer.setAnimationLoop(null);
+      renderer.dispose();
+      container.innerHTML = '';
+    }
+  };
+  logMsg('VRM ready');
+}
+
+sel.addEventListener('change', () => {
+  if (sel.value === 'vrm') initVRM();
+  else clearVRM();
+});
+
+logMsg('Page loaded');
+status.textContent = '就緒 — 請選擇 3D VRM';
+</script>
+</body>
+</html>

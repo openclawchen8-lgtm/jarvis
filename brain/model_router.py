@@ -121,9 +121,11 @@ class OpenAIBackend:
 # Router
 # ============================================================================
 
+_PROJ_ROOT = Path(__file__).resolve().parent.parent
+
 BACKENDS: Dict[str, str] = {
-    "mnn-qwen1.5":  "/Users/claw/Projects/JARVIS-on-mac/models_qwen1.5",
-    "mnn-qwen3.5":  "/Users/claw/Projects/JARVIS-on-mac/models",
+    "mnn-qwen1.5":  str(_PROJ_ROOT / "models_qwen1.5"),
+    "mnn-qwen3.5":  str(_PROJ_ROOT / "models"),
 }
 
 
